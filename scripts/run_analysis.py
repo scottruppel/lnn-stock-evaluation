@@ -35,7 +35,7 @@ from utils.experiment_tracker import ExperimentTracker
 from utils.metrics import StockPredictionMetrics
 
 # Import training and evaluation scripts as modules
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '.'))
 from train_model import LNNTrainer
 from evaluate_model import ModelEvaluator
 
