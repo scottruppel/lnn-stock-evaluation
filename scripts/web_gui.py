@@ -25,8 +25,8 @@ import time
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from src.utils.experiment_tracker import ExperimentTracker
-from src.data.data_loader import StockDataLoader
+from utils.experiment_tracker import ExperimentTracker
+from data.data_loader import StockDataLoader
 
 # Initialize Dash app
 app = dash.Dash(__name__, title="Stock LNN Analysis")
