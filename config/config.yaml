@@ -8,10 +8,10 @@ data:
 # Model configuration
 model:
   sequence_length: 30
-  hidden_size: 50
+  hidden_size: 100
   learning_rate: 0.001
   batch_size: 32
-  num_epochs: 100
+  num_epochs: 150
   patience: 10
 
 # Analysis configuration
