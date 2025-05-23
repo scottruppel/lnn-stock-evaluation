@@ -11,33 +11,33 @@ import sys
 import os
 import traceback
 
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Add project root to path (not just src)
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 def test_core_imports():
     """Test core module imports."""
     print("Testing core imports...")
     
     try:
-        # Test data modules
-        from data.data_loader import StockDataLoader
-        from data.preprocessor import StockDataPreprocessor
+        # Test data modules - CORRECTED PATHS
+        from src.data.data_loader import StockDataLoader
+        from src.data.preprocessor import StockDataPreprocessor
         print("✓ Data modules imported successfully")
         
-        # Test model modules
-        from models.lnn_model import LiquidNetwork, ModelConfig
+        # Test model modules - CORRECTED PATHS
+        from src.models.lnn_model import LiquidNetwork, ModelConfig
         print("✓ Model modules imported successfully")
         
-        # Test analysis modules
-        from analysis.pattern_recognition import PatternRecognizer
-        from analysis.feature_engineering import AdvancedFeatureEngineer
-        from analysis.dimensionality_reduction import DimensionalityReducer
-        from analysis.temporal_analysis import TemporalAnalyzer
+        # Test analysis modules - CORRECTED PATHS
+        from src.analysis.pattern_recognition import PatternRecognizer
+        from src.analysis.feature_engineering import AdvancedFeatureEngineer
+        from src.analysis.dimensionality_reduction import DimensionalityReducer
+        from src.analysis.temporal_analysis import TemporalAnalyzer
         print("✓ Analysis modules imported successfully")
         
-        # Test utility modules
-        from utils.metrics import StockPredictionMetrics
-        from utils.experiment_tracker import ExperimentTracker
+        # Test utility modules - CORRECTED PATHS
+        from src.utils.metrics import StockPredictionMetrics
+        from src.utils.experiment_tracker import ExperimentTracker
         print("✓ Utility modules imported successfully")
         
         return True
