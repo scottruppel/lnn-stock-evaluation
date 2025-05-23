@@ -1,1 +1,21 @@
+# Data configuration
+data:
+  tickers: ["^GSPC", "AGG", "QQQ", "AAPL"]
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  target_ticker: "AAPL"
 
+# Model configuration
+model:
+  sequence_length: 30
+  hidden_size: 50
+  learning_rate: 0.001
+  batch_size: 32
+  num_epochs: 100
+  patience: 10
+
+# Analysis configuration
+analysis:
+  n_components_pca: 10
+  umap_n_neighbors: 15
+  umap_min_dist: 0.1
