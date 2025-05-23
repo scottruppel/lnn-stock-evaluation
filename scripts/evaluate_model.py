@@ -26,15 +26,15 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # Import our modules
 # NEW (working):
-from src.data.data_loader import StockDataLoader
-from src.data.preprocessor import StockDataPreprocessor, prepare_model_data
-from src.models.lnn_model import LiquidNetwork
-from src.analysis.pattern_recognition import PatternRecognizer
-from src.analysis.feature_engineering import AdvancedFeatureEngineer
-from src.analysis.dimensionality_reduction import DimensionalityReducer
-from src.analysis.temporal_analysis import TemporalAnalyzer
-from src.utils.metrics import StockPredictionMetrics
-from src.utils.experiment_tracker import ExperimentTracker
+from data.data_loader import StockDataLoader
+from data.preprocessor import StockDataPreprocessor, prepare_model_data
+from models.lnn_model import LiquidNetwork
+from analysis.pattern_recognition import PatternRecognizer
+from analysis.feature_engineering import AdvancedFeatureEngineer
+from analysis.dimensionality_reduction import DimensionalityReducer
+from analysis.temporal_analysis import TemporalAnalyzer
+from utils.metrics import StockPredictionMetrics
+from utils.experiment_tracker import ExperimentTracker
 
 class ModelEvaluator:
     """
