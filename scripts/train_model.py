@@ -367,9 +367,14 @@ class LNNTrainer:
         print(f"Final training loss: {train_loss:.6f}")
         print(f"Best validation loss: {best_val_loss:.6f}")
         
-        # Log experiment
-        if experiment_name:
-            self.log_experiment(experiment_name, model_config, model_save_path)
+# Log experiment
+if experiment_name:
+    # Safety check - only log if model was actually saved
+    if hasattr(self, 'model_path') and self.model_path:
+        self.log_experiment(experiment_name, model_config, self.model_path)
+    else:
+        print("⚠️  Model path not found - skipping experiment logging")
+        print("✅ Training completed successfully, but experiment logging skipped")
         
         return model_save_path
     
