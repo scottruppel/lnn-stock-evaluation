@@ -12,7 +12,7 @@ def gpu_accelerated_moving_average(self, data, window):
         kernel = torch.ones(window, device='cuda') / window
         padded = torch.nn.functional.pad(data_gpu, (window-1,0))
         result = torch.nn.functional.convld(
-            padded.unsqueeze(0).unsqueeze(0)
+            padded.unsqueeze(0).unsqueeze(0),
             kernel.unsqueeze(0).unsqueeze(0)
         ).squeeze()
         return result.cpu().numpy()
