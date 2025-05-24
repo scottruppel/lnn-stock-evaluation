@@ -132,7 +132,33 @@ def analyze_financial_performance(self):
                 'sharpe': best_sharpe_exp if 'eval_sharpe_ratio' in self.df.columns else None,
                 'r2': best_r2_exp if 'eval_r2' in self.df.columns else None
             }
-        }import json
+        }
+    
+    def analyze_training_efficiency(self):
+        """
+        Analyze training efficiency metrics like epochs to convergence.
+        """
+        print("\n⚡ TRAINING EFFICIENCY ANALYSIS")
+        print("=" * 50)
+        
+        if 'training_epochs' in self.df.columns:
+            print("📊 Training Epochs Statistics:")
+            print(f"   Average epochs: {self.df['training_epochs'].mean():.1f}")
+            print(f"   Median epochs: {self.df['training_epochs'].median():.1f}")
+            print(f"   Range: {self.df['training_epochs'].min()}-{self.df['training_epochs'].max()}")
+            
+            # Find models that converge quickly with good performance
+            if 'eval_r2' in self.df.columns:
+                self.df['efficiency_score'] = self.df['eval_r2'] / self.df['training_epochs']
+                most_efficient = self.df.loc[self.df['efficiency_score'].idxmax()]
+                
+                print(f"\n🏆 Most efficient model:")
+                print(f"   Experiment: {most_efficient['experiment_name']}")
+                print(f"   R²: {most_efficient['eval_r2']:.4f}")
+                print(f"   Epochs: {most_efficient['training_epochs']}")
+                print(f"   Efficiency: {most_efficient['efficiency_score']:.6f}")
+        
+        return Noneimport json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
