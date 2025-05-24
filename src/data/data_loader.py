@@ -16,7 +16,7 @@ class StockDataLoader:
         self.data = yf.download(self.tickers, start=self.start_date, end=self.end_date)
         return self.data
     
-    def get_closing_prices(self) -> Dict[str, pd.Series]:
+    def get_closing_prices(self) -> Dict[str, np.ndarray]:
         """Extract closing prices for each ticker"""
         if self.data is None:
             self.download_data()
