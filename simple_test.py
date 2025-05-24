@@ -27,11 +27,11 @@ def test_import(module_path, class_name):
 
 print("=== CHECKING FILES EXIST ===")
 files_to_check = [
-    "src/data/data_loader.py",
-    "src/data/preprocessor.py", 
-    "src/models/lnn_model.py",
-    "src/utils/metrics.py",
-    "src/utils/experiment_tracker.py"
+    "data/data_loader.py",
+    "data/preprocessor.py", 
+    "models/lnn_model.py",
+    "utils/metrics.py",
+    "utils/experiment_tracker.py"
 ]
 
 all_files_exist = True
@@ -42,9 +42,9 @@ for file_path in files_to_check:
 print("\n=== TESTING IMPORTS ===")
 if all_files_exist:
     # Use correct import paths with 'src.' prefix
-    test_import("src.data.data_loader", "StockDataLoader")
-    test_import("src.models.lnn_model", "LiquidNetwork")
-    test_import("src.utils.metrics", "StockPredictionMetrics")
-    test_import("src.utils.experiment_tracker", "ExperimentTracker")
+    test_import("data.data_loader", "StockDataLoader")
+    test_import("models.lnn_model", "LiquidNetwork")
+    test_import("utils.metrics", "StockPredictionMetrics")
+    test_import("utils.experiment_tracker", "ExperimentTracker")
 else:
     print("Cannot test imports - some files are missing!")
