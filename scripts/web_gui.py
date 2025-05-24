@@ -312,9 +312,7 @@ def update_analysis(n_clicks, n_intervals, target_stock, context_stocks, start_d
         
         progress = html.Div()
 
-# Apply the conversion before JSON serializaiton
-clean_results = convert_numpy_types(analysis_status["results"])
-return status, progress, json.dumps(analysis_status["results"], cls=NumpyEncoder)
+        return status, progress, json.dumps(analysis_status["results"], cls=NumpyEncoder)
     
     else:
         status = html.Div([
