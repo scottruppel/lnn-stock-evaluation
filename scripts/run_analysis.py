@@ -36,7 +36,7 @@ class NumpyEncoder(json.JSONEncoder):
         elif isinstance(obj, pd.DataFrame):
             return obj.to_dict('records')
         elif isinstance(obj, pd.Series):
-            reutrn obj.to_dict()
+            return obj.to_dict()
         elif hasattr(obj, 'item'):
             return obj.item()
         return super (NumpyEncoder, self).default(obj)
