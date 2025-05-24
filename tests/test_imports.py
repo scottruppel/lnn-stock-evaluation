@@ -12,7 +12,7 @@ import os
 import traceback
 
 # Add project root to path (not just src)
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 def test_core_imports():
     """Test core module imports."""
