@@ -315,35 +315,82 @@ def update_analysis(n_clicks, n_intervals, target_stock, context_stocks, start_d
         return status, progress, ""
 
 def run_analysis_background(config):
-    """Run analysis in background thread."""
+    """Run REAL analysis in background thread."""
     analysis_status["running"] = True
-    analysis_status["progress"] = "Loading data..."
+    analysis_status["progress"] = "Starting real analysis..."
     
     try:
-        # Simulate analysis steps (replace with actual analysis)
-        time.sleep(2)
-        analysis_status["progress"] = "Processing features..."
+        # Create temporary config file for this analysis
+        import tempfile
+        import yaml
         
-        time.sleep(3)
-        analysis_status["progress"] = "Training model..."
+        analysis_status["progress"] = "Preparing configuration..."
         
-        time.sleep(5)
-        analysis_status["progress"] = "Evaluating performance..."
-        
-        time.sleep(2)
-        analysis_status["progress"] = "Generating report..."
-        
-        # Mock results (replace with actual analysis results)
-        analysis_status["results"] = {
-            'target_stock': config['target_stock'],
-            'total_return': 0.156,
-            'sharpe_ratio': 1.23,
-            'max_drawdown': -0.08,
-            'directional_accuracy': 0.63,
-            'timestamp': datetime.now().isoformat()
+        # Create real config based on GUI selections
+        real_config = {
+            'data': {
+                'tickers': config['context_stocks'] + [config['target_stock']],
+                'start_date': config['start_date'],
+                'end_date': config['end_date'], 
+                'target_ticker': config['target_stock']
+            },
+            'model': {
+                'sequence_length': config['sequence_length'],
+                'hidden_size': config['hidden_size'],
+                'learning_rate': config['learning_rate'],
+                'batch_size': 32,
+                'num_epochs': 50,  # Shorter for GUI
+                'patience': 10
+            },
+            'analysis': {
+                'use_advanced_features': 'advanced_features' in config['analysis_options'],
+                'pattern_analysis': 'patterns' in config['analysis_options'],
+                'temporal_analysis': 'temporal' in config['analysis_options']
+            }
         }
         
-        time.sleep(1)
+        # Save temporary config
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            yaml.dump(real_config, f)
+            temp_config_path = f.name
+        
+        analysis_status["progress"] = "Running real analysis..."
+        
+        # Import and run real analysis
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+        from scripts.run_analysis import ComprehensiveAnalyzer
+        
+        # Run real analysis
+        analyzer = ComprehensiveAnalyzer(
+            config_path=temp_config_path,
+            experiment_name=f"gui_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        )
+        
+        results = analyzer.run_complete_analysis(phases=['data', 'training', 'evaluation'])
+        
+        # Extract real results
+        if 'evaluation' in results and results['evaluation']:
+            eval_metrics = results['evaluation'].get('metrics', {})
+            
+            trading_metrics = eval_metrics.get('trading_metrics', {})
+            directional_metrics = eval_metrics.get('directional_metrics', {})
+            
+            analysis_status["results"] = {
+                'target_stock': config['target_stock'],
+                'total_return': trading_metrics.get('total_return', 0),
+                'sharpe_ratio': trading_metrics.get('sharpe_ratio', 0),
+                'max_drawdown': trading_metrics.get('max_drawdown', 0),
+                'directional_accuracy': directional_metrics.get('directional_accuracy', 0),
+                'timestamp': datetime.now().isoformat()
+            }
+        else:
+            # Fallback if analysis fails
+            analysis_status["results"] = {'error': 'Analysis failed to complete'}
+        
+        # Clean up temp file
+        os.unlink(temp_config_path)
         
     except Exception as e:
         analysis_status["results"] = {'error': str(e)}
