@@ -1,1 +1,30 @@
-
+# Integration settings for your LNN project
+integration:
+  # Feature engineering
+  feature_alignment: "forward_fill"  # how to handle missing dates
+  feature_scaling: "standardize"     # standardize economic features
+  
+  # Model integration
+  feature_position: "append"         # append to existing features
+  feature_prefix: "econ_"           # prefix for economic feature names
+  
+  # Training settings
+  validation_split: 0.2
+  test_split: 0.1
+  
+# Your existing data settings
+existing_data:
+  # Update these paths to match your project structure
+  features_file: "data/processed/technical_features.csv"
+  targets_file: "data/processed/targets.csv"
+  symbols_file: "config/symbols.yaml"
+  
+  # Feature columns (if using CSV)
+  date_column: "date"
+  symbol_column: "symbol"
+  
+# Output settings
+output:
+  augmented_features_file: "data/processed/augmented_features.csv"
+  feature_names_file: "data/processed/feature_names.json"
+  save_intermediate: true
