@@ -1,164 +1,4 @@
-def analyze_financial_performance(self):
-        """
-        Analyze financial-specific metrics like Sharpe ratio, returns, drawdowns.
-        """
-        print("\n💰 FINANCIAL PERFORMANCE ANALYSIS")
-        print("=" * 50)
-        
-        financial_metrics = ['eval_r2', 'eval_sharpe_ratio', 'eval_strategy_return', 
-                           'eval_buy_hold_return', 'eval_max_drawdown', 'eval_directional_accuracy']
-        
-        available_metrics = [m for m in financial_metrics if m in self.df.columns]
-        
-        if not available_metrics:
-            print("⚠️  No financial metrics found.")
-            return None
-        
-        # Summary statistics
-        print("📊 Financial Metrics Summary:")
-        summary = self.df[available_metrics].describe().round(4)
-        print(summary)
-        
-        # Find best performing experiments
-        if 'eval_sharpe_ratio' in self.df.columns:
-            best_sharpe_idx = self.df['eval_sharpe_ratio'].idxmax()
-            best_sharpe_exp = self.df.loc[best_sharpe_idx]
-            
-            print(f"\n🏆 Best Sharpe Ratio: {best_sharpe_exp['eval_sharpe_ratio']:.4f}")
-            print(f"   📋 Experiment: {best_sharpe_exp['experiment_name']}")
-            print(f"   🎯 Ticker: {best_sharpe_exp['target_ticker']}")
-            print(f"   ⚙️  Config: {best_sharpe_exp['sequence_length']} seq, {best_sharpe_exp['hidden_size']} hidden")
-        
-        if 'eval_r2' in self.df.columns:
-            best_r2_idx = self.df['eval_r2'].idxmax()
-            best_r2_exp = self.df.loc[best_r2_idx]
-            
-            print(f"\n📈 Best R² Score: {best_r2_exp['eval_r2']:.4f}")
-            print(f"   📋 Experiment: {best_r2_exp['experiment_name']}")
-            print(f"   🎯 Ticker: {best_r2_exp['target_ticker']}")
-            print(f"   ⚙️  Config: {best_r2_exp['sequence_length']} seq, {best_r2_exp['hidden_size']} hidden")
-        
-        # Strategy vs Buy-and-Hold comparison
-        if 'eval_strategy_return' in self.df.columns and 'eval_buy_hold_return' in self.df.columns:
-            self.df['strategy_outperformance'] = self.df['eval_strategy_return'] - self.df['eval_buy_hold_return']
-            
-            outperforming = (self.df['strategy_outperformance'] > 0).sum()
-            total = len(self.df)
-            
-            print(f"\n📈 Strategy Performance:")
-            print(f"   🎯 Models beating buy-and-hold: {outperforming}/{total} ({outperforming/total*100:.1f}%)")
-            print(f"   📊 Average outperformance: {self.df['strategy_outperformance'].mean():.4f}")
-            
-            # Best outperforming model
-            best_outperf_idx = self.df['strategy_outperformance'].idxmax()
-            best_outperf = self.df.loc[best_outperf_idx]
-            print(f"   🏆 Best outperformance: {best_outperf['strategy_outperformance']:.4f}")
-            print(f"     📋 Experiment: {best_outperf['experiment_name']}")
-        
-        # Risk-adjusted analysis
-        if 'eval_max_drawdown' in self.df.columns and 'eval_sharpe_ratio' in self.df.columns:
-            # Risk score (lower is better): combines max drawdown and inverse Sharpe
-            self.df['risk_score'] = abs(self.df['eval_max_drawdown']) - self.df['eval_sharpe_ratio']
-            
-            best_risk_idx = self.df['risk_score'].idxmin()
-            best_risk_exp = self.df.loc[best_risk_idx]
-            
-            print(f"\n🛡️  Best Risk-Adjusted Performance:")
-            print(f"   📋 Experiment: {best_risk_exp['experiment_name']}")
-            print(f"   📊 Sharpe Ratio: {best_risk_exp['eval_sharpe_ratio']:.4f}")
-            print(f"   📉 Max Drawdown: {best_risk_exp['eval_max_drawdown']:.4f}")
-        
-        # Create financial performance visualization
-        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-        
-        # Sharpe ratio distribution
-        if 'eval_sharpe_ratio' in self.df.columns:
-            axes[0, 0].hist(self.df['eval_sharpe_ratio'], bins=15, alpha=0.7)
-            axes[0, 0].set_title('Sharpe Ratio Distribution')
-            axes[0, 0].axvline(self.df['eval_sharpe_ratio'].mean(), color='red', linestyle='--', label='Mean')
-            axes[0, 0].legend()
-        
-        # R² vs Sharpe ratio
-        if 'eval_r2' in self.df.columns and 'eval_sharpe_ratio' in self.df.columns:
-            scatter = axes[0, 1].scatter(self.df['eval_r2'], self.df['eval_sharpe_ratio'], 
-                                       c=self.df['target_ticker'].astype('category').cat.codes, alpha=0.7)
-            axes[0, 1].set_xlabel('R² Score')
-            axes[0, 1].set_ylabel('Sharpe Ratio')
-            axes[0, 1].set_title('R² vs Sharpe Ratio')
-        
-        # Strategy vs Buy-and-Hold returns
-        if 'eval_strategy_return' in self.df.columns and 'eval_buy_hold_return' in self.df.columns:
-            axes[0, 2].scatter(self.df['eval_buy_hold_return'], self.df['eval_strategy_return'], alpha=0.7)
-            # Add diagonal line (where strategy = buy-and-hold)
-            min_val = min(self.df['eval_buy_hold_return'].min(), self.df['eval_strategy_return'].min())
-            max_val = max(self.df['eval_buy_hold_return'].max(), self.df['eval_strategy_return'].max())
-            axes[0, 2].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8)
-            axes[0, 2].set_xlabel('Buy-and-Hold Return')
-            axes[0, 2].set_ylabel('Strategy Return')
-            axes[0, 2].set_title('Strategy vs Buy-and-Hold Returns')
-        
-        # Max drawdown analysis
-        if 'eval_max_drawdown' in self.df.columns:
-            ticker_drawdowns = self.df.groupby('target_ticker')['eval_max_drawdown'].mean()
-            axes[1, 0].bar(ticker_drawdowns.index, ticker_drawdowns.values)
-            axes[1, 0].set_title('Average Max Drawdown by Ticker')
-            axes[1, 0].tick_params(axis='x', rotation=45)
-        
-        # Directional accuracy by ticker
-        if 'eval_directional_accuracy' in self.df.columns:
-            ticker_accuracy = self.df.groupby('target_ticker')['eval_directional_accuracy'].mean()
-            axes[1, 1].bar(ticker_accuracy.index, ticker_accuracy.values)
-            axes[1, 1].set_title('Average Directional Accuracy by Ticker')
-            axes[1, 1].set_ylabel('Accuracy')
-            axes[1, 1].tick_params(axis='x', rotation=45)
-        
-        # Risk-return scatter
-        if 'eval_sharpe_ratio' in self.df.columns and 'eval_max_drawdown' in self.df.columns:
-            for ticker in self.df['target_ticker'].unique():
-                ticker_data = self.df[self.df['target_ticker'] == ticker]
-                axes[1, 2].scatter(ticker_data['eval_max_drawdown'], ticker_data['eval_sharpe_ratio'], 
-                                 label=ticker, alpha=0.7)
-            axes[1, 2].set_xlabel('Max Drawdown')
-            axes[1, 2].set_ylabel('Sharpe Ratio')
-            axes[1, 2].set_title('Risk-Return Profile by Ticker')
-            axes[1, 2].legend()
-        
-        plt.tight_layout()
-        plt.show()
-        
-        return {
-            'summary': summary,
-            'best_configs': {
-                'sharpe': best_sharpe_exp if 'eval_sharpe_ratio' in self.df.columns else None,
-                'r2': best_r2_exp if 'eval_r2' in self.df.columns else None
-            }
-        }
-    
-    def analyze_training_efficiency(self):
-        """
-        Analyze training efficiency metrics like epochs to convergence.
-        """
-        print("\n⚡ TRAINING EFFICIENCY ANALYSIS")
-        print("=" * 50)
-        
-        if 'training_epochs' in self.df.columns:
-            print("📊 Training Epochs Statistics:")
-            print(f"   Average epochs: {self.df['training_epochs'].mean():.1f}")
-            print(f"   Median epochs: {self.df['training_epochs'].median():.1f}")
-            print(f"   Range: {self.df['training_epochs'].min()}-{self.df['training_epochs'].max()}")
-            
-            # Find models that converge quickly with good performance
-            if 'eval_r2' in self.df.columns:
-                self.df['efficiency_score'] = self.df['eval_r2'] / self.df['training_epochs']
-                most_efficient = self.df.loc[self.df['efficiency_score'].idxmax()]
-                
-                print(f"\n🏆 Most efficient model:")
-                print(f"   Experiment: {most_efficient['experiment_name']}")
-                print(f"   R²: {most_efficient['eval_r2']:.4f}")
-                print(f"   Epochs: {most_efficient['training_epochs']}")
-                print(f"   Efficiency: {most_efficient['efficiency_score']:.6f}")
-        
-        return Noneimport json
+import json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -170,16 +10,16 @@ warnings.filterwarnings('ignore')
 
 class FinancialModelAnalysisInsights:
     """
-    Analyzes JSON files containing model training/analysis results to derive insights
+    Analyzes JSONL files containing financial model training/analysis results to derive insights
     about optimal hyperparameters and architectural choices.
     """
     
     def __init__(self, json_file_path):
         """
-        Initialize the analyzer with your JSON file.
+        Initialize the analyzer with your JSONL file.
         
         Args:
-            json_file_path (str): Path to your JSON file containing analysis results
+            json_file_path (str): Path to your JSONL file containing analysis results
         """
         self.json_file_path = json_file_path
         self.data = None
@@ -375,7 +215,7 @@ class FinancialModelAnalysisInsights:
         plt.subplot(2, 2, 1)
         self.df.boxplot(column=performance_metric, by='sequence_length', ax=plt.gca())
         plt.title('Performance Distribution by Sequence Length')
-        plt.suptitle('')
+        plt.suptitle('')  # Remove default title
         
         # Ticker-specific analysis
         plt.subplot(2, 2, 2)
@@ -501,6 +341,142 @@ class FinancialModelAnalysisInsights:
         plt.show()
         
         return hidden_stats
+    
+    def analyze_financial_performance(self):
+        """
+        Analyze financial-specific metrics like Sharpe ratio, returns, drawdowns.
+        """
+        print("\n💰 FINANCIAL PERFORMANCE ANALYSIS")
+        print("=" * 50)
+        
+        financial_metrics = ['eval_r2', 'eval_sharpe_ratio', 'eval_strategy_return', 
+                           'eval_buy_hold_return', 'eval_max_drawdown', 'eval_directional_accuracy']
+        
+        available_metrics = [m for m in financial_metrics if m in self.df.columns]
+        
+        if not available_metrics:
+            print("⚠️  No financial metrics found.")
+            return None
+        
+        # Summary statistics
+        print("📊 Financial Metrics Summary:")
+        summary = self.df[available_metrics].describe().round(4)
+        print(summary)
+        
+        # Find best performing experiments
+        if 'eval_sharpe_ratio' in self.df.columns:
+            best_sharpe_idx = self.df['eval_sharpe_ratio'].idxmax()
+            best_sharpe_exp = self.df.loc[best_sharpe_idx]
+            
+            print(f"\n🏆 Best Sharpe Ratio: {best_sharpe_exp['eval_sharpe_ratio']:.4f}")
+            print(f"   📋 Experiment: {best_sharpe_exp['experiment_name']}")
+            print(f"   🎯 Ticker: {best_sharpe_exp['target_ticker']}")
+            print(f"   ⚙️  Config: {best_sharpe_exp['sequence_length']} seq, {best_sharpe_exp['hidden_size']} hidden")
+        
+        if 'eval_r2' in self.df.columns:
+            best_r2_idx = self.df['eval_r2'].idxmax()
+            best_r2_exp = self.df.loc[best_r2_idx]
+            
+            print(f"\n📈 Best R² Score: {best_r2_exp['eval_r2']:.4f}")
+            print(f"   📋 Experiment: {best_r2_exp['experiment_name']}")
+            print(f"   🎯 Ticker: {best_r2_exp['target_ticker']}")
+            print(f"   ⚙️  Config: {best_r2_exp['sequence_length']} seq, {best_r2_exp['hidden_size']} hidden")
+        
+        # Strategy vs Buy-and-Hold comparison
+        if 'eval_strategy_return' in self.df.columns and 'eval_buy_hold_return' in self.df.columns:
+            self.df['strategy_outperformance'] = self.df['eval_strategy_return'] - self.df['eval_buy_hold_return']
+            
+            outperforming = (self.df['strategy_outperformance'] > 0).sum()
+            total = len(self.df)
+            
+            print(f"\n📈 Strategy Performance:")
+            print(f"   🎯 Models beating buy-and-hold: {outperforming}/{total} ({outperforming/total*100:.1f}%)")
+            print(f"   📊 Average outperformance: {self.df['strategy_outperformance'].mean():.4f}")
+            
+            # Best outperforming model
+            best_outperf_idx = self.df['strategy_outperformance'].idxmax()
+            best_outperf = self.df.loc[best_outperf_idx]
+            print(f"   🏆 Best outperformance: {best_outperf['strategy_outperformance']:.4f}")
+            print(f"     📋 Experiment: {best_outperf['experiment_name']}")
+        
+        # Risk-adjusted analysis
+        if 'eval_max_drawdown' in self.df.columns and 'eval_sharpe_ratio' in self.df.columns:
+            # Risk score (lower is better): combines max drawdown and inverse Sharpe
+            self.df['risk_score'] = abs(self.df['eval_max_drawdown']) - self.df['eval_sharpe_ratio']
+            
+            best_risk_idx = self.df['risk_score'].idxmin()
+            best_risk_exp = self.df.loc[best_risk_idx]
+            
+            print(f"\n🛡️  Best Risk-Adjusted Performance:")
+            print(f"   📋 Experiment: {best_risk_exp['experiment_name']}")
+            print(f"   📊 Sharpe Ratio: {best_risk_exp['eval_sharpe_ratio']:.4f}")
+            print(f"   📉 Max Drawdown: {best_risk_exp['eval_max_drawdown']:.4f}")
+        
+        # Create financial performance visualization
+        fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+        
+        # Sharpe ratio distribution
+        if 'eval_sharpe_ratio' in self.df.columns:
+            axes[0, 0].hist(self.df['eval_sharpe_ratio'], bins=15, alpha=0.7)
+            axes[0, 0].set_title('Sharpe Ratio Distribution')
+            axes[0, 0].axvline(self.df['eval_sharpe_ratio'].mean(), color='red', linestyle='--', label='Mean')
+            axes[0, 0].legend()
+        
+        # R² vs Sharpe ratio
+        if 'eval_r2' in self.df.columns and 'eval_sharpe_ratio' in self.df.columns:
+            scatter = axes[0, 1].scatter(self.df['eval_r2'], self.df['eval_sharpe_ratio'], 
+                                       c=self.df['target_ticker'].astype('category').cat.codes, alpha=0.7)
+            axes[0, 1].set_xlabel('R² Score')
+            axes[0, 1].set_ylabel('Sharpe Ratio')
+            axes[0, 1].set_title('R² vs Sharpe Ratio')
+        
+        # Strategy vs Buy-and-Hold returns
+        if 'eval_strategy_return' in self.df.columns and 'eval_buy_hold_return' in self.df.columns:
+            axes[0, 2].scatter(self.df['eval_buy_hold_return'], self.df['eval_strategy_return'], alpha=0.7)
+            # Add diagonal line (where strategy = buy-and-hold)
+            min_val = min(self.df['eval_buy_hold_return'].min(), self.df['eval_strategy_return'].min())
+            max_val = max(self.df['eval_buy_hold_return'].max(), self.df['eval_strategy_return'].max())
+            axes[0, 2].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8)
+            axes[0, 2].set_xlabel('Buy-and-Hold Return')
+            axes[0, 2].set_ylabel('Strategy Return')
+            axes[0, 2].set_title('Strategy vs Buy-and-Hold Returns')
+        
+        # Max drawdown analysis
+        if 'eval_max_drawdown' in self.df.columns:
+            ticker_drawdowns = self.df.groupby('target_ticker')['eval_max_drawdown'].mean()
+            axes[1, 0].bar(ticker_drawdowns.index, ticker_drawdowns.values)
+            axes[1, 0].set_title('Average Max Drawdown by Ticker')
+            axes[1, 0].tick_params(axis='x', rotation=45)
+        
+        # Directional accuracy by ticker
+        if 'eval_directional_accuracy' in self.df.columns:
+            ticker_accuracy = self.df.groupby('target_ticker')['eval_directional_accuracy'].mean()
+            axes[1, 1].bar(ticker_accuracy.index, ticker_accuracy.values)
+            axes[1, 1].set_title('Average Directional Accuracy by Ticker')
+            axes[1, 1].set_ylabel('Accuracy')
+            axes[1, 1].tick_params(axis='x', rotation=45)
+        
+        # Risk-return scatter
+        if 'eval_sharpe_ratio' in self.df.columns and 'eval_max_drawdown' in self.df.columns:
+            for ticker in self.df['target_ticker'].unique():
+                ticker_data = self.df[self.df['target_ticker'] == ticker]
+                axes[1, 2].scatter(ticker_data['eval_max_drawdown'], ticker_data['eval_sharpe_ratio'], 
+                                 label=ticker, alpha=0.7)
+            axes[1, 2].set_xlabel('Max Drawdown')
+            axes[1, 2].set_ylabel('Sharpe Ratio')
+            axes[1, 2].set_title('Risk-Return Profile by Ticker')
+            axes[1, 2].legend()
+        
+        plt.tight_layout()
+        plt.show()
+        
+        return {
+            'summary': summary,
+            'best_configs': {
+                'sharpe': best_sharpe_exp if 'eval_sharpe_ratio' in self.df.columns else None,
+                'r2': best_r2_exp if 'eval_r2' in self.df.columns else None
+            }
+        }
     
     def generate_optimization_recommendations(self, performance_metric='eval_r2'):
         """
