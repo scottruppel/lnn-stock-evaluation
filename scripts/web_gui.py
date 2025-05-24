@@ -22,6 +22,16 @@ import json
 import threading
 import time
 
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NumpyEncoder, self).default(obj)
+
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -301,23 +311,10 @@ def update_analysis(n_clicks, n_intervals, target_stock, context_stocks, start_d
         ])
         
         progress = html.Div()
-        
-# Convert numpy types to Python types before JSON serialization
-def convert_numpy_types(obj):
-    if hasattr(obj, 'item'):  #numpy scalars
-        return obj.item()
-    elif hasattr(obj, 'tolist'):  #numpy arrays
-        return obj.tolist()
-    elif isinstance(obj, dict):
-        return {key: convert_numpy_types(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_numpy_types(item) for item in obj]
-    else:
-                    return obj
 
 # Apply the conversion before JSON serializaiton
 clean_results = convert_numpy_types(analysis_status["results"])
-return status, progress, json.dumps(clean_results)
+return status, progress, json.dumps(analysis_status["results"], cls=NumpyEncoder)
     
     else:
         status = html.Div([
