@@ -3,7 +3,7 @@ import sys
 import os
 
 # Add the project root to Python path (not just src)
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 def test_file_exists(filepath):
     """Check if a file exists"""
