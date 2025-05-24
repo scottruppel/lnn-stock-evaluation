@@ -24,6 +24,18 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif hasattr(obj, 'to dict'):
+            return obj.to_dict()
+        return super (NumpyEncoder, self).default(obj)
+
 # Add src to Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from data.data_loader import StockDataLoader
@@ -493,7 +505,7 @@ class ComprehensiveAnalyzer:
         with open(results_path, 'w') as f:
             # Convert numpy types for JSON serialization
             json_safe_results = self._convert_to_json_safe(self.analysis_results)
-            json.dump(json_safe_results, f, indent=2)
+            json.dump(json_safe_results, f, indent=2, cls=NumpyEncoder)
         
         print(f"✓ Comprehensive report saved to: {report_path}")
         print(f"✓ Analysis data saved to: {results_path}")
