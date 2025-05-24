@@ -1,9 +1,23 @@
 import numpy as np
 import pandas as pd
+import torch
 from typing import Dict, List, Optional, Tuple
 from scipy import stats
 from sklearn.preprocessing import StandardScaler
 import warnings
+
+def gpu_accelerated_moving_average(self, data, window):
+    if torch.cuda.is available()
+    data_gpu = torch.tensor(data.values, device='cuda', dtype=torch.float32)
+    kernel = torch.ones(window, device='cuda') / window
+    padded = torch.nn.functional.pad(data_gpu, (window-1,0))
+    result = torch.nn.functional.convld(
+        padded.unsqueeze(0),unsqueeze(0)
+        kernel.unsqueeze(0),unsqueeze(0)
+    ).squeeze()
+    return result.cpu().numpy()
+else:
+    return data.rolling(window).mean()
 
 class AdvancedFeatureEngineer:
     """
