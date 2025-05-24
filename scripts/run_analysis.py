@@ -33,8 +33,12 @@ class NumpyEncoder(json.JSONEncoder):
             return float(obj)
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
-        elif hasattr(obj, 'to dict'):
-            return obj.to_dict()
+        elif isinstance(obj, pd.DataFrame):
+            return obj.to_dict('records')
+        elif isinstance(obj, pd.Series):
+            reutrn obj.to_dict()
+        elif hasattr(obj, 'item'):
+            return obj.item()
         return super (NumpyEncoder, self).default(obj)
 
 # Add src to Python path
