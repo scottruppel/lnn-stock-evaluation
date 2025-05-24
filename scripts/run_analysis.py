@@ -18,6 +18,7 @@ import sys
 import argparse
 import yaml
 import time
+import numpy as np
 import json
 from datetime import datetime
 import warnings
