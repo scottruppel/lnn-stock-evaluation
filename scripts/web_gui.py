@@ -21,6 +21,9 @@ from datetime import datetime, date
 import json
 import threading
 import time
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
