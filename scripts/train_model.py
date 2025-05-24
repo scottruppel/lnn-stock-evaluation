@@ -22,8 +22,8 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-# Add src to Python path so we can import our modules
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Add project root to Python path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 # Import our custom modules
 from data.data_loader import StockDataLoader
@@ -315,6 +315,9 @@ class LNNTrainer:
         
         model_config = self.initialize_model()
         
+        # Initialize model_save_path at the start
+        model_save_path = None
+        
         # Training parameters
         num_epochs = self.config['model']['num_epochs']
         patience = self.config['model']['patience']
@@ -363,18 +366,28 @@ class LNNTrainer:
                     print(f"Best validation loss: {best_val_loss:.6f}")
                     break
         
+        # Training completed - print summary
         print(f"\nTraining completed!")
         print(f"Final training loss: {train_loss:.6f}")
         print(f"Best validation loss: {best_val_loss:.6f}")
         
-# Log experiment
-if experiment_name:
-    # Safety check - only log if model was actually saved
-    if hasattr(self, 'model_path') and self.model_path:
-        self.log_experiment(experiment_name, model_config, self.model_path)
-    else:
-        print("⚠️  Model path not found - skipping experiment logging")
-        print("✅ Training completed successfully, but experiment logging skipped")
+        # Ensure we always have a model saved
+        if model_save_path is None:
+            model_save_path = f'models/saved_models/final_lnn_model_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pth'
+            torch.save({
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'epoch': epoch + 1,
+                'val_loss': best_val_loss,
+                'config': self.config
+            }, model_save_path)
+            print(f"Saved final model to: {model_save_path}")
+        
+        # Log experiment if requested
+        if experiment_name:
+            self.log_experiment(experiment_name, model_config, model_save_path)
+        else:
+            print("✅ Training completed successfully (no experiment logging)")
         
         return model_save_path
     
