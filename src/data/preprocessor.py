@@ -353,8 +353,8 @@ def prepare_model_data(price_data: Dict[str, np.ndarray],
     test_input = input_data[train_size:]
     test_target = target_data[train_size:]
     
-    # Create sequences
-    from src.models.lnn_model import create_sequences
+    # Create sequences removed src from src.models.lnn_model
+    from models.lnn_model import create_sequences
     
     X_train, y_train = create_sequences(train_input, train_target, sequence_length)
     X_test, y_test = create_sequences(test_input, test_target, sequence_length)
