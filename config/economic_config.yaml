@@ -1,0 +1,63 @@
+# Economic Sentiment Configuration
+economic_indicators:
+  # Which indicators to fetch from FRED
+  consumer_confidence:
+    enabled: true
+    series_id: "UMCSENT"
+    weight: 0.20
+    description: "University of Michigan Consumer Sentiment"
+  
+  ism_manufacturing:
+    enabled: true
+    series_id: "NAPM"
+    weight: 0.15
+    description: "ISM Manufacturing PMI"
+  
+  jobless_claims:
+    enabled: true
+    series_id: "ICSA"
+    weight: 0.20
+    description: "Initial Weekly Jobless Claims"
+  
+  cpi_inflation:
+    enabled: true
+    series_id: "CPIAUCSL"
+    weight: 0.15
+    description: "Consumer Price Index"
+  
+  treasury_10y:
+    enabled: true
+    series_id: "DGS10"
+    weight: 0.15
+    description: "10-Year Treasury Rate"
+  
+  treasury_2y:
+    enabled: true
+    series_id: "DGS2"
+    weight: 0.15
+    description: "2-Year Treasury Rate"
+
+# Processing parameters
+processing:
+  lookback_months: 24
+  cache_refresh_hours: 24
+  sentiment_window: 252  # trading days for rolling calculations
+  normalization_method: "tanh"  # or "minmax", "zscore"
+
+# Performance tracking
+performance:
+  track_correlations: true
+  track_api_performance: true
+  save_metrics: true
+  metrics_file: "data/metrics/economic_performance.json"
+
+# Data sources
+data_sources:
+  fred:
+    base_url: "https://api.stlouisfed.org/fred"
+    timeout: 30
+    max_retries: 3
+  
+  cache:
+    directory: "data/cache/economic"
+    max_age_hours: 24
