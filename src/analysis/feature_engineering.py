@@ -287,7 +287,7 @@ class AdvancedFeatureEngineer:
         # On-Balance Volume (OBV)
         obv = np.where(close > close.shift(1), volume, 
                       np.where(close < close.shift(1), -volume, 0)).cumsum()
-        features.append(obv.values.reshape(-1, 1))
+        features.append(obv.reshape(-1, 1))
         names.append('obv')
         
         # Volume Rate of Change
