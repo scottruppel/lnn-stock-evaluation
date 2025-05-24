@@ -20,24 +20,24 @@ def test_core_imports():
     
     try:
         # Test data modules - CORRECTED PATHS
-        from src.data.data_loader import StockDataLoader
-        from src.data.preprocessor import StockDataPreprocessor
+        from data.data_loader import StockDataLoader
+        from data.preprocessor import StockDataPreprocessor
         print("✓ Data modules imported successfully")
         
         # Test model modules - CORRECTED PATHS
-        from src.models.lnn_model import LiquidNetwork, ModelConfig
+        from models.lnn_model import LiquidNetwork, ModelConfig
         print("✓ Model modules imported successfully")
         
         # Test analysis modules - CORRECTED PATHS
-        from src.analysis.pattern_recognition import PatternRecognizer
-        from src.analysis.feature_engineering import AdvancedFeatureEngineer
-        from src.analysis.dimensionality_reduction import DimensionalityReducer
-        from src.analysis.temporal_analysis import TemporalAnalyzer
+        from analysis.pattern_recognition import PatternRecognizer
+        from analysis.feature_engineering import AdvancedFeatureEngineer
+        from analysis.dimensionality_reduction import DimensionalityReducer
+        from analysis.temporal_analysis import TemporalAnalyzer
         print("✓ Analysis modules imported successfully")
         
         # Test utility modules - CORRECTED PATHS
-        from src.utils.metrics import StockPredictionMetrics
-        from src.utils.experiment_tracker import ExperimentTracker
+        from utils.metrics import StockPredictionMetrics
+        from utils.experiment_tracker import ExperimentTracker
         print("✓ Utility modules imported successfully")
         
         return True
