@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 import warnings
 
 def gpu_accelerated_moving_average(self, data, window):
-    if torch.cuda.is available()
+    if torch.cuda.is_available():
     data_gpu = torch.tensor(data.values, device='cuda', dtype=torch.float32)
     kernel = torch.ones(window, device='cuda') / window
     padded = torch.nn.functional.pad(data_gpu, (window-1,0))
