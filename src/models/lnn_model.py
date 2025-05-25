@@ -191,3 +191,25 @@ def get_model_summary(model: LiquidNetwork) -> dict:
             'mean': model.liquid_cell.tau.mean().item()
         }
     }
+# Add this to the END of your src/models/lnn_model.py file
+
+# Import aliases for backward compatibility
+LiquidNeuralNetwork = LiquidNetwork  # Alias for compatibility
+
+# Export all important classes
+__all__ = [
+    'LiquidTimeCell',
+    'LiquidNetwork', 
+    'LiquidNeuralNetwork',  # Alias
+    'ModelConfig',
+    'create_sequences',
+    'count_parameters',
+    'get_model_summary'
+]
+
+# Print debug info when imported
+if __name__ != "__main__":
+    import sys
+    if 'debug' in sys.argv or '--debug' in sys.argv:
+        print(f"✓ LNN model imported successfully")
+        print(f"  Available classes: {__all__}")
