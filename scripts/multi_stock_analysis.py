@@ -376,12 +376,12 @@ class MultiStockAnalyzer:
                 yaml.dump(config, f)
             
             # Import and run the comprehensive analyzer
-            print("Importing ComprehensiveAnalyzer...")
+            print("Importing EnhancedComprehensiveAnalyzer...")
             sys.path.insert(0, os.path.join(PROJECT_ROOT, "scripts"))
-            from run_analysis import ComprehensiveAnalyzer
+            from run_analysis import EnhancedComprehensiveAnalyzer
             
             # Create analyzer with custom config
-            analyzer = ComprehensiveAnalyzer(
+            analyzer = EnhancedComprehensiveAnalyzer(
                 config_path=config_path,
                 experiment_name=experiment_id
             )
