@@ -5,6 +5,7 @@ Analyzes 20 stocks with 10 different hyperparameter combinations each (200 total
 Builds comprehensive dataset for data mining and pattern discovery.
 
 Usage on Jetson Orin Nano:
+    # FROM PROJECT ROOT DIRECTORY:
     cd /path/to/your/lnn/project
     python scripts/multi_stock_analysis.py
     
@@ -27,16 +28,81 @@ from typing import Dict, List, Tuple, Any
 import warnings
 warnings.filterwarnings('ignore')
 
+# === PATH SETUP ===
+# Auto-detect project root and fix paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # Go up one level from scripts/
+
+print("=== MULTI-STOCK LNN ANALYSIS STARTING ===")
+print(f"Script location: {SCRIPT_DIR}")
+print(f"Project root: {PROJECT_ROOT}")
+print(f"Current working directory: {os.getcwd()}")
+
+# Change to project root if not already there
+if os.getcwd() != PROJECT_ROOT:
+    print(f"Changing to project root: {PROJECT_ROOT}")
+    os.chdir(PROJECT_ROOT)
+
+# Verify project structure
+required_dirs = ['src', 'config', 'scripts', 'results']
+missing_dirs = []
+for directory in required_dirs:
+    if os.path.exists(directory):
+        print(f"✓ Found {directory}/")
+    else:
+        print(f"❌ Missing {directory}/")
+        missing_dirs.append(directory)
+
+if missing_dirs:
+    print(f"ERROR: Missing directories: {missing_dirs}")
+    print("Please run this script from your LNN project root directory.")
+    sys.exit(1)
+
+# Add src to Python path
+src_path = os.path.join(PROJECT_ROOT, 'src')
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+    print(f"✓ Added {src_path} to Python path")
+
 # GPU monitoring imports (for Jetson)
 try:
     import psutil
     GPU_MONITORING = True
+    print("✓ psutil available for system monitoring")
 except ImportError:
     GPU_MONITORING = False
-    print("psutil not available - GPU monitoring disabled")
+    print("⚠️  psutil not available - system monitoring disabled")
 
-# Add project paths
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Test PyTorch and CUDA
+try:
+    import torch
+    print(f"✓ PyTorch {torch.__version__} loaded")
+    print(f"  CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"  GPU device: {torch.cuda.get_device_name(0)}")
+    else:
+        print("  ⚠️  Running on CPU - training will be slower")
+except ImportError as e:
+    print(f"❌ PyTorch import failed: {e}")
+
+print("=== IMPORTING PROJECT MODULES ===")
+
+# Test project imports
+try:
+    from data.data_loader import StockDataLoader
+    print("✓ StockDataLoader imported")
+except ImportError as e:
+    print(f"❌ StockDataLoader import failed: {e}")
+    print("  Make sure you have the data module in src/data/")
+
+try:
+    from run_analysis import ComprehensiveAnalyzer
+    print("✓ ComprehensiveAnalyzer imported")
+except ImportError as e:
+    print(f"❌ ComprehensiveAnalyzer import failed: {e}")
+    print("  Make sure run_analysis.py is in the scripts/ directory")
+
+print("=== INITIALIZATION COMPLETE ===\n")
 
 class MultiStockAnalyzer:
     """
@@ -44,7 +110,14 @@ class MultiStockAnalyzer:
     and hyperparameter combinations. Configured via YAML files for maximum flexibility.
     """
     
-    def __init__(self, config_path: str = "config/config2.yaml", output_dir: str = None):
+    def __init__(self, config_path: str = "config/config.yaml", output_dir: str = None):
+        print(f"Initializing MultiStockAnalyzer...")
+        print(f"Config path: {config_path}")
+        
+        # Ensure we're working with absolute paths
+        if not os.path.isabs(config_path):
+            config_path = os.path.join(PROJECT_ROOT, config_path)
+        
         self.config_path = config_path
         
         # Load configuration
@@ -57,6 +130,10 @@ class MultiStockAnalyzer:
             self.output_dir = self.config.get('multi_stock_analysis', {}).get(
                 'output_dir', 'results/multi_stock_analysis'
             )
+        
+        # Ensure output directory is absolute
+        if not os.path.isabs(self.output_dir):
+            self.output_dir = os.path.join(PROJECT_ROOT, self.output_dir)
         
         self.results_file = os.path.join(self.output_dir, "comprehensive_results.json")
         self.summary_file = os.path.join(self.output_dir, "analysis_summary.json")
@@ -72,10 +149,10 @@ class MultiStockAnalyzer:
         self.total_experiments = 0
         self.completed_experiments = 0
         
-        print(f"MultiStockAnalyzer initialized")
-        print(f"Configuration: {config_path}")
-        print(f"Output directory: {self.output_dir}")
-        print(f"Existing results loaded: {len(self.all_results)} experiments")
+        print(f"✓ MultiStockAnalyzer initialized")
+        print(f"  Configuration: {self.config_path}")
+        print(f"  Output directory: {self.output_dir}")
+        print(f"  Existing results loaded: {len(self.all_results)} experiments")
     
     def load_config(self) -> Dict:
         """Load configuration from YAML file."""
@@ -271,14 +348,17 @@ class MultiStockAnalyzer:
             
             # Create custom config for this experiment
             config = self.create_experiment_config(ticker, params)
-            config_path = f"config/temp_config_{experiment_id}.yaml"
+            config_path = os.path.join(PROJECT_ROOT, "config", f"temp_config_{experiment_id}.yaml")
             
             # Save temporary config
-            os.makedirs('config', exist_ok=True)
+            temp_config_dir = os.path.join(PROJECT_ROOT, "config")
+            os.makedirs(temp_config_dir, exist_ok=True)
             with open(config_path, 'w') as f:
                 yaml.dump(config, f)
             
             # Import and run the comprehensive analyzer
+            print("Importing ComprehensiveAnalyzer...")
+            sys.path.insert(0, os.path.join(PROJECT_ROOT, "scripts"))
             from run_analysis import ComprehensiveAnalyzer
             
             # Create analyzer with custom config
