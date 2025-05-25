@@ -85,9 +85,9 @@ try:
 except ImportError as e:
     print(f"❌ PyTorch import failed: {e}")
 
-print("=== IMPORTING PROJECT MODULES ===")
+print("=== TESTING PROJECT IMPORTS ===")
 
-# Test project imports
+# Test project imports with better error handling
 try:
     from data.data_loader import StockDataLoader
     print("✓ StockDataLoader imported")
@@ -95,12 +95,31 @@ except ImportError as e:
     print(f"❌ StockDataLoader import failed: {e}")
     print("  Make sure you have the data module in src/data/")
 
+# Test model imports
 try:
-    from run_analysis import ComprehensiveAnalyzer
-    print("✓ ComprehensiveAnalyzer imported")
+    from models.lnn_model import LiquidNetwork, ModelConfig
+    print("✓ LiquidNetwork imported from models.lnn_model")
 except ImportError as e:
-    print(f"❌ ComprehensiveAnalyzer import failed: {e}")
-    print("  Make sure run_analysis.py is in the scripts/ directory")
+    print(f"❌ LiquidNetwork import failed: {e}")
+    print("  Checking what's available in lnn_model...")
+    try:
+        import models.lnn_model as lnn_mod
+        available = [name for name in dir(lnn_mod) if not name.startswith('_')]
+        print(f"  Available in lnn_model: {available}")
+    except Exception as e2:
+        print(f"  Could not inspect lnn_model: {e2}")
+
+try:
+    # Try importing the run_analysis module without executing it
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("run_analysis", 
+                                                 os.path.join(PROJECT_ROOT, "scripts", "run_analysis.py"))
+    if spec and spec.loader:
+        print("✓ run_analysis.py found and can be loaded")
+    else:
+        print("❌ run_analysis.py cannot be loaded")
+except Exception as e:
+    print(f"❌ run_analysis.py check failed: {e}")
 
 print("=== INITIALIZATION COMPLETE ===\n")
 
