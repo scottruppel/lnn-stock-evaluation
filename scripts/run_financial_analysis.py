@@ -9,7 +9,7 @@ import json
 import os
 
 # Import your enhanced Financial LNN (lnn_modelv2.py)
-from lnn_modelv2 import (
+from src.lnn_modelv2 import (
     EnhancedFinancialLNN, 
     EnhancedFinancialFeatureExtractor,
     ModelComparisonFramework
@@ -17,7 +17,7 @@ from lnn_modelv2 import (
 
 # Import your baseline LNN model (lnn_model.py)
 try:
-    from lnn_model import LiquidNeuralNetwork as BaselineLNN
+    from src.lnn_model import LiquidNeuralNetwork as BaselineLNN
     BASELINE_AVAILABLE = True
     print("Successfully imported baseline LNN from lnn_model.py")
 except ImportError as e:
