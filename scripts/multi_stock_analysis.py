@@ -97,10 +97,10 @@ except ImportError as e:
 
 # Test model imports
 try:
-    from models.lnn_model import LiquidNetwork, ModelConfig
-    print("✓ LiquidNetwork imported from models.lnn_model")
+    from models.lnn_model import LiquidNeuralNetwork, ModelConfig
+    print("✓ LiquidNeuralNetwork imported from models.lnn_model")
 except ImportError as e:
-    print(f"❌ LiquidNetwork import failed: {e}")
+    print(f"❌ LiquidNeuralNetwork import failed: {e}")
     print("  Checking what's available in lnn_model...")
     try:
         import models.lnn_model as lnn_mod
