@@ -1,0 +1,210 @@
+# Enhanced Configuration for LNN Multi-Stock Analysis
+# This file controls both single-stock analysis and comprehensive multi-stock experiments
+
+# Basic data configuration (used for single-stock analysis)
+data:
+  tickers: ['^GSPC', 'AGG', 'QQQ', 'AAPL']
+  start_date: '2020-01-01'
+  end_date: '2024-12-31'
+  target_ticker: 'AAPL'
+
+# Model configuration (base parameters)
+model:
+  sequence_length: 30
+  hidden_size: 64
+  learning_rate: 0.001
+  batch_size: 32
+  num_epochs: 50  # Reduced for multi-stock analysis speed
+  patience: 8
+
+# Analysis configuration
+analysis:
+  use_advanced_features: true
+  n_components_pca: 10
+  umap_n_neighbors: 15
+  pattern_analysis: true
+  temporal_analysis: true
+  dimensionality_reduction: true
+
+# Multi-Stock Analysis Configuration
+multi_stock_analysis:
+  # Which universe and grid to use by default
+  active_universe: 'diverse_20'  # Change this to switch between universes
+  active_grid: 'comprehensive_10'    # Change this to switch between grids
+  
+  # Output configuration
+  output_dir: 'results/multi_stock_analysis'
+  
+  # Define multiple stock universes
+  stock_universes:
+    
+    # 20-stock diverse universe across sectors
+    diverse_20:
+      - {ticker: "AAPL", description: "Apple - Consumer Electronics"}
+      - {ticker: "MSFT", description: "Microsoft - Software"}
+      - {ticker: "GOOGL", description: "Google - Internet Services"}
+      - {ticker: "NVDA", description: "NVIDIA - Semiconductors"}
+      - {ticker: "TSLA", description: "Tesla - Electric Vehicles"}
+      - {ticker: "JPM", description: "JPMorgan Chase - Banking"}
+      - {ticker: "BAC", description: "Bank of America - Banking"}
+      - {ticker: "BRK-B", description: "Berkshire Hathaway - Conglomerate"}
+      - {ticker: "JNJ", description: "Johnson & Johnson - Healthcare"}
+      - {ticker: "PFE", description: "Pfizer - Pharmaceuticals"}
+      - {ticker: "AMZN", description: "Amazon - E-commerce"}
+      - {ticker: "WMT", description: "Walmart - Retail"}
+      - {ticker: "HD", description: "Home Depot - Retail"}
+      - {ticker: "XOM", description: "ExxonMobil - Oil & Gas"}
+      - {ticker: "CVX", description: "Chevron - Oil & Gas"}
+      - {ticker: "BA", description: "Boeing - Aerospace"}
+      - {ticker: "CAT", description: "Caterpillar - Heavy Machinery"}
+      - {ticker: "KO", description: "Coca-Cola - Beverages"}
+      - {ticker: "PG", description: "Procter & Gamble - Consumer Goods"}
+      - {ticker: "SPY", description: "S&P 500 ETF - Market Index"}
+    
+    # Tech-focused universe
+    tech_focus:
+      - {ticker: "AAPL", description: "Apple Inc."}
+      - {ticker: "MSFT", description: "Microsoft Corp."}
+      - {ticker: "GOOGL", description: "Alphabet Inc."}
+      - {ticker: "NVDA", description: "NVIDIA Corp."}
+      - {ticker: "TSLA", description: "Tesla Inc."}
+      - {ticker: "AMZN", description: "Amazon.com Inc."}
+      - {ticker: "META", description: "Meta Platforms Inc."}
+      - {ticker: "NFLX", description: "Netflix Inc."}
+      - {ticker: "CRM", description: "Salesforce Inc."}
+      - {ticker: "ORCL", description: "Oracle Corp."}
+      - {ticker: "AMD", description: "Advanced Micro Devices"}
+      - {ticker: "INTC", description: "Intel Corp."}
+    
+    # Financial sector focus
+    financial_focus:
+      - {ticker: "JPM", description: "JPMorgan Chase & Co."}
+      - {ticker: "BAC", description: "Bank of America Corp."}
+      - {ticker: "WFC", description: "Wells Fargo & Co."}
+      - {ticker: "GS", description: "Goldman Sachs Group"}
+      - {ticker: "MS", description: "Morgan Stanley"}
+      - {ticker: "C", description: "Citigroup Inc."}
+      - {ticker: "BRK-B", description: "Berkshire Hathaway"}
+      - {ticker: "AXP", description: "American Express"}
+      - {ticker: "V", description: "Visa Inc."}
+      - {ticker: "MA", description: "Mastercard Inc."}
+    
+    # Healthcare sector focus
+    healthcare_focus:
+      - {ticker: "JNJ", description: "Johnson & Johnson"}
+      - {ticker: "PFE", description: "Pfizer Inc."}
+      - {ticker: "UNH", description: "UnitedHealth Group"}
+      - {ticker: "ABBV", description: "AbbVie Inc."}
+      - {ticker: "MRK", description: "Merck & Co."}
+      - {ticker: "TMO", description: "Thermo Fisher Scientific"}
+      - {ticker: "ABT", description: "Abbott Laboratories"}
+      - {ticker: "MDT", description: "Medtronic PLC"}
+      - {ticker: "BMY", description: "Bristol Myers Squibb"}
+      - {ticker: "LLY", description: "Eli Lilly and Co."}
+    
+    # Quick testing universe (5 stocks)
+    quick_test:
+      - {ticker: "AAPL", description: "Apple Inc."}
+      - {ticker: "MSFT", description: "Microsoft Corp."}
+      - {ticker: "GOOGL", description: "Alphabet Inc."}
+      - {ticker: "TSLA", description: "Tesla Inc."}
+      - {ticker: "SPY", description: "S&P 500 ETF"}
+    
+    # Mega-cap universe
+    mega_cap:
+      - {ticker: "AAPL", description: "Apple Inc."}
+      - {ticker: "MSFT", description: "Microsoft Corp."}
+      - {ticker: "GOOGL", description: "Alphabet Inc."}
+      - {ticker: "AMZN", description: "Amazon.com Inc."}
+      - {ticker: "NVDA", description: "NVIDIA Corp."}
+      - {ticker: "TSLA", description: "Tesla Inc."}
+      - {ticker: "META", description: "Meta Platforms"}
+      - {ticker: "BRK-B", description: "Berkshire Hathaway"}
+    
+    # Alternative format examples (for flexibility):
+    # Simple list format:
+    simple_list: ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"]
+    
+    # List of lists format:
+    list_format:
+      - ["AAPL", "Apple Inc."]
+      - ["MSFT", "Microsoft Corp."]
+      - ["GOOGL", "Alphabet Inc."]
+      - ["AMZN", "Amazon.com Inc."]
+  
+  # Define multiple hyperparameter grids
+  hyperparameter_grids:
+    
+    # Comprehensive 10-combination grid
+    comprehensive_10:
+      - {hidden_size: 32, sequence_length: 20, description: "Small-Short"}
+      - {hidden_size: 32, sequence_length: 40, description: "Small-Medium"}
+      - {hidden_size: 32, sequence_length: 60, description: "Small-Long"}
+      - {hidden_size: 64, sequence_length: 20, description: "Medium-Short"}
+      - {hidden_size: 64, sequence_length: 30, description: "Medium-Medium"}
+      - {hidden_size: 64, sequence_length: 50, description: "Medium-Long"}
+      - {hidden_size: 128, sequence_length: 20, description: "Large-Short"}
+      - {hidden_size: 128, sequence_length: 30, description: "Large-Medium"}
+      - {hidden_size: 256, sequence_length: 30, description: "XLarge-Medium"}
+      - {hidden_size: 64, sequence_length: 90, description: "Medium-VeryLong"}
+    
+    # Quick 3-combination grid for testing
+    quick_3:
+      - {hidden_size: 32, sequence_length: 20, description: "Quick-Small"}
+      - {hidden_size: 64, sequence_length: 30, description: "Quick-Medium"}
+      - {hidden_size: 128, sequence_length: 30, description: "Quick-Large"}
+    
+    # Focus on hidden size variations
+    hidden_size_focus:
+      - {hidden_size: 16, sequence_length: 30, description: "Tiny"}
+      - {hidden_size: 32, sequence_length: 30, description: "Small"}
+      - {hidden_size: 64, sequence_length: 30, description: "Medium"}
+      - {hidden_size: 128, sequence_length: 30, description: "Large"}
+      - {hidden_size: 256, sequence_length: 30, description: "XLarge"}
+      - {hidden_size: 512, sequence_length: 30, description: "XXLarge"}
+    
+    # Focus on sequence length variations
+    sequence_length_focus:
+      - {hidden_size: 64, sequence_length: 10, description: "VeryShort"}
+      - {hidden_size: 64, sequence_length: 20, description: "Short"}
+      - {hidden_size: 64, sequence_length: 30, description: "Medium"}
+      - {hidden_size: 64, sequence_length: 60, description: "Long"}
+      - {hidden_size: 64, sequence_length: 90, description: "VeryLong"}
+      - {hidden_size: 64, sequence_length: 120, description: "ExtraLong"}
+    
+    # Jetson Nano optimized (smaller models for faster training)
+    jetson_optimized:
+      - {hidden_size: 16, sequence_length: 15, description: "Nano-Fast"}
+      - {hidden_size: 32, sequence_length: 20, description: "Nano-Balanced"}
+      - {hidden_size: 64, sequence_length: 25, description: "Nano-Quality"}
+      - {hidden_size: 32, sequence_length: 40, description: "Nano-Temporal"}
+    
+    # High-performance grid (for powerful systems)
+    high_performance:
+      - {hidden_size: 128, sequence_length: 60, description: "HP-Medium"}
+      - {hidden_size: 256, sequence_length: 60, description: "HP-Large"}
+      - {hidden_size: 512, sequence_length: 60, description: "HP-XLarge"}
+      - {hidden_size: 256, sequence_length: 120, description: "HP-LongTerm"}
+      - {hidden_size: 1024, sequence_length: 30, description: "HP-Massive"}
+
+# Experiment tracking settings
+experiment_tracking:
+  enabled: true
+  save_models: true
+  save_plots: true
+  track_gpu_usage: true
+  
+# Visualization settings
+visualization:
+  save_plots: true
+  plot_formats: ['png', 'pdf']
+  dpi: 300
+  style: 'seaborn'
+
+# GPU and performance settings
+performance:
+  use_gpu: true
+  mixed_precision: false  # Set to true for newer GPUs with Tensor Cores
+  num_workers: 2  # For data loading
+  pin_memory: true
+  benchmark: true  # For consistent input sizes
