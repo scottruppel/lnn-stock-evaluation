@@ -719,4 +719,163 @@ class MultiStockAnalyzer:
             report_lines.append("-" * 40)
             report_lines.append(f"Stock: {best['ticker']}")
             report_lines.append(f"Sharpe Ratio: {best['sharpe_ratio']:.3f}")
-            report_lines.append(f"Architecture: {best['
+            report_lines.append(f"Architecture: {best['hidden_size']} hidden units, {best['sequence_length']} sequence length")
+            report_lines.append(f"Experiment ID: {best['experiment_id']}")
+            report_lines.append("")
+        
+        if 'best_accuracy_experiment' in summary:
+            best = summary['best_accuracy_experiment']
+            report_lines.append("BEST DIRECTIONAL ACCURACY EXPERIMENT:")
+            report_lines.append("-" * 40)
+            report_lines.append(f"Stock: {best['ticker']}")
+            report_lines.append(f"Directional Accuracy: {best['directional_accuracy']:.1%}")
+            report_lines.append(f"Architecture: {best['hidden_size']} hidden units, {best['sequence_length']} sequence length")
+            report_lines.append(f"Experiment ID: {best['experiment_id']}")
+            report_lines.append("")
+        
+        # Stock performance breakdown
+        successful_results = [r for r in self.all_results if r['status'] == 'completed']
+        if successful_results:
+            report_lines.append("TOP PERFORMING STOCKS:")
+            report_lines.append("-" * 40)
+            
+            # Calculate average performance by stock
+            stock_performance = {}
+            for result in successful_results:
+                ticker = result['ticker']
+                if ticker not in stock_performance:
+                    stock_performance[ticker] = []
+                
+                # Collect key metrics
+                metrics = result.get('metrics', {})
+                if metrics.get('sharpe_ratio') is not None:
+                    stock_performance[ticker].append({
+                        'sharpe_ratio': metrics['sharpe_ratio'],
+                        'directional_accuracy': metrics.get('directional_accuracy', 0),
+                        'strategy_return': metrics.get('strategy_return', 0)
+                    })
+            
+            # Calculate averages and sort
+            stock_averages = []
+            for ticker, performances in stock_performance.items():
+                if performances:
+                    avg_sharpe = np.mean([p['sharpe_ratio'] for p in performances])
+                    avg_accuracy = np.mean([p['directional_accuracy'] for p in performances if p['directional_accuracy']])
+                    avg_return = np.mean([p['strategy_return'] for p in performances if p['strategy_return']])
+                    
+                    stock_averages.append({
+                        'ticker': ticker,
+                        'avg_sharpe': avg_sharpe,
+                        'avg_accuracy': avg_accuracy,
+                        'avg_return': avg_return,
+                        'experiments': len(performances)
+                    })
+            
+            # Sort by Sharpe ratio and show top 10
+            stock_averages.sort(key=lambda x: x['avg_sharpe'], reverse=True)
+            for i, stock in enumerate(stock_averages[:10], 1):
+                report_lines.append(f"{i:2d}. {stock['ticker']:6s} - "
+                                  f"Sharpe: {stock['avg_sharpe']:6.3f}, "
+                                  f"Accuracy: {stock['avg_accuracy']:5.1%}, "
+                                  f"Return: {stock['avg_return']:6.1%} "
+                                  f"({stock['experiments']} experiments)")
+            
+            report_lines.append("")
+        
+        # Parameter analysis
+        if successful_results:
+            report_lines.append("PARAMETER COMBINATION ANALYSIS:")
+            report_lines.append("-" * 40)
+            
+            # Calculate average performance by parameter combination
+            param_performance = {}
+            for result in successful_results:
+                param_key = f"{result['hidden_size']}h_{result['sequence_length']}s"
+                if param_key not in param_performance:
+                    param_performance[param_key] = []
+                
+                metrics = result.get('metrics', {})
+                if metrics.get('sharpe_ratio') is not None:
+                    param_performance[param_key].append({
+                        'sharpe_ratio': metrics['sharpe_ratio'],
+                        'directional_accuracy': metrics.get('directional_accuracy', 0),
+                        'description': result.get('param_description', param_key)
+                    })
+            
+            # Calculate averages and sort
+            param_averages = []
+            for param_key, performances in param_performance.items():
+                if performances:
+                    avg_sharpe = np.mean([p['sharpe_ratio'] for p in performances])
+                    avg_accuracy = np.mean([p['directional_accuracy'] for p in performances if p['directional_accuracy']])
+                    description = performances[0]['description']
+                    
+                    param_averages.append({
+                        'param_key': param_key,
+                        'description': description,
+                        'avg_sharpe': avg_sharpe,
+                        'avg_accuracy': avg_accuracy,
+                        'experiments': len(performances)
+                    })
+            
+            # Sort by Sharpe ratio
+            param_averages.sort(key=lambda x: x['avg_sharpe'], reverse=True)
+            for i, param in enumerate(param_averages, 1):
+                report_lines.append(f"{i:2d}. {param['description']:15s} - "
+                                  f"Sharpe: {param['avg_sharpe']:6.3f}, "
+                                  f"Accuracy: {param['avg_accuracy']:5.1%} "
+                                  f"({param['experiments']} experiments)")
+        
+        # Technical summary
+        report_lines.append("")
+        report_lines.append("TECHNICAL SUMMARY:")
+        report_lines.append("-" * 40)
+        failed_results = [r for r in self.all_results if r['status'] == 'failed']
+        if failed_results:
+            report_lines.append(f"Failed experiments: {len(failed_results)}")
+            # Show common failure reasons
+            error_counts = {}
+            for result in failed_results:
+                error = result.get('error', 'Unknown error')
+                # Simplify error message
+                if 'CUDA' in error or 'GPU' in error:
+                    error_key = 'GPU/CUDA Error'
+                elif 'memory' in error.lower() or 'out of memory' in error.lower():
+                    error_key = 'Out of Memory'
+                elif 'timeout' in error.lower() or 'connection' in error.lower():
+                    error_key = 'Network/Timeout'
+                else:
+                    error_key = 'Other Error'
+                
+                error_counts[error_key] = error_counts.get(error_key, 0) + 1
+            
+            for error_type, count in error_counts.items():
+                report_lines.append(f"  {error_type}: {count} experiments")
+        
+        if successful_results:
+            durations = [r.get('duration_seconds', 0) for r in successful_results if r.get('duration_seconds')]
+            if durations:
+                avg_duration = np.mean(durations)
+                total_duration = sum(durations)
+                report_lines.append(f"Average experiment duration: {avg_duration:.1f} seconds")
+                report_lines.append(f"Total successful experiment time: {total_duration/3600:.1f} hours")
+        
+        report_lines.append("")
+        report_lines.append("=" * 80)
+        
+        # Save report
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = os.path.join(self.output_dir, f"analysis_report_{timestamp}.txt")
+        
+        with open(report_path, 'w') as f:
+            f.write('\n'.join(report_lines))
+        
+        print(f"✓ Comprehensive report saved to: {report_path}")
+        return '\n'.join(report_lines)
+
+# Add the missing import at the top of the file if not already there
+try:
+    import numpy as np
+except ImportError:
+    print("Warning: numpy not available for advanced statistics")
+    np = None
