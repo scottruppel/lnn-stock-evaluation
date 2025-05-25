@@ -120,6 +120,23 @@ multi_stock_analysis:
       - {ticker: "TSLA", description: "Tesla Inc."}
       - {ticker: "META", description: "Meta Platforms"}
       - {ticker: "BRK-B", description: "Berkshire Hathaway"}
+
+    # My Portfolio universe
+    my_portfolio:
+      - {ticker: "NVDA", description: "NVIDIA"}
+      - {ticker: "BBAI", description: "Big Bear AI"}
+      - {ticker: "GOOGL", description: "Alphabet Inc."}
+      - {ticker: "SPY", description: "S&P 500 ETF"}
+      - {ticker: "QQQ", description: "Nasdaq Tech"}
+      - {ticker: "KO", description: "Coca Cola"}
+      - {ticker: "XOM", description: "Exxon Mobile"}
+      - {ticker: "U", description: "Unity"}
+      - {ticker: "CAVA", description: "Cava"}
+      - {ticker: "HAS", description: "Hasbro"}
+      - {ticker: "SMR", description: "Small Nuclear Reactors"}
+      - {ticker: "RDDT", description: "Reddit"}
+      - {ticker: "RIVN", description: "Rivian"}
+      - {ticker: "JEPI", description: "Dividend Fund"}
     
     # Alternative format examples (for flexibility):
     # Simple list format:
