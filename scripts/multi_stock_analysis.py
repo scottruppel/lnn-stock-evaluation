@@ -44,7 +44,7 @@ class MultiStockAnalyzer:
     and hyperparameter combinations. Configured via YAML files for maximum flexibility.
     """
     
-    def __init__(self, config_path: str = "config/config.yaml", output_dir: str = None):
+    def __init__(self, config_path: str = "config/config2.yaml", output_dir: str = None):
         self.config_path = config_path
         
         # Load configuration
