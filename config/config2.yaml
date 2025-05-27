@@ -1,0 +1,190 @@
+# Batch Analysis Configuration for LNN Stock Market Analysis
+# This file controls which stocks and parameter combinations to test
+
+# Base configuration applied to all runs
+base_config:
+  start_date: "2020-01-01"
+  end_date: "2024-12-31"
+  learning_rate: 0.001
+  batch_size: 32
+  num_epochs: 100
+  patience: 10
+  use_advanced_features: true
+  n_components_pca: 10
+  umap_n_neighbors: 15
+  pattern_analysis: true
+  temporal_analysis: true
+  dimensionality_reduction: true
+
+# Parameter combinations to test
+parameters:
+  hidden_sizes: [200, 500, 1000, 1500]
+  sequence_lengths: [30, 45, 60]
+
+# Stock portfolios to analyze
+# Each stock in a portfolio will be used as a target for prediction
+# while other stocks in the same portfolio serve as context/features
+portfolios:
+  # Technology sector - high growth, higher volatility
+  tech:
+    - "AAPL"    # Apple Inc
+    - "MSFT"    # Microsoft Corp
+    - "GOOGL"   # Alphabet Inc
+    - "AMZN"    # Amazon.com Inc
+    - "NVDA"    # NVIDIA Corp
+    - "TSLA"    # Tesla Inc
+    - "META"    # Meta Platforms Inc
+    - "NFLX"    # Netflix Inc
+    - "CRM"     # Salesforce Inc
+    - "ADBE"    # Adobe Inc
+    - "INTC"    # Intel Corp
+    - "AMD"     # Advanced Micro Devices
+    - "ORCL"    # Oracle Corp
+    - "NOW"     # ServiceNow Inc
+    - "PYPL"    # PayPal Holdings
+
+  # Financial sector - cyclical, interest rate sensitive
+  finance:
+    - "JPM"     # JPMorgan Chase & Co
+    - "BAC"     # Bank of America Corp
+    - "WFC"     # Wells Fargo & Co
+    - "GS"      # Goldman Sachs Group
+    - "MS"      # Morgan Stanley
+    - "C"       # Citigroup Inc
+    - "AXP"     # American Express Co
+    - "BLK"     # BlackRock Inc
+    - "SCHW"    # Charles Schwab Corp
+    - "USB"     # U.S. Bancorp
+    - "PNC"     # PNC Financial Services
+    - "TFC"     # Truist Financial Corp
+    - "CME"     # CME Group Inc
+    - "ICE"     # Intercontinental Exchange
+    - "SPGI"    # S&P Global Inc
+
+  # Dividend-focused stocks - stable, income-generating
+  dividend:
+    - "JNJ"     # Johnson & Johnson
+    - "PG"      # Procter & Gamble Co
+    - "KO"      # Coca-Cola Co
+    - "PEP"     # PepsiCo Inc
+    - "MCD"     # McDonald's Corp
+    - "WMT"     # Walmart Inc
+    - "VZ"      # Verizon Communications
+    - "T"       # AT&T Inc
+    - "XOM"     # Exxon Mobil Corp
+    - "CVX"     # Chevron Corp
+    - "MMM"     # 3M Co
+    - "IBM"     # International Business Machines
+    - "MO"      # Altria Group Inc
+    - "KMB"     # Kimberly-Clark Corp
+    - "CL"      # Colgate-Palmolive Co
+
+  # Value stocks - traditionally undervalued, solid fundamentals
+  value:
+    - "BRK-B"   # Berkshire Hathaway Inc Class B
+    - "V"       # Visa Inc
+    - "MA"      # Mastercard Inc
+    - "HD"      # Home Depot Inc
+    - "UNH"     # UnitedHealth Group Inc
+    - "PFE"     # Pfizer Inc
+    - "ABBV"    # AbbVie Inc
+    - "LLY"     # Eli Lilly and Co
+    - "TMO"     # Thermo Fisher Scientific
+    - "DHR"     # Danaher Corp
+    - "NKE"     # Nike Inc
+    - "DIS"     # Walt Disney Co
+    - "COST"    # Costco Wholesale Corp
+    - "LOW"     # Lowe's Companies Inc
+    - "TGT"     # Target Corp
+
+  # Small-cap stocks - higher growth potential, higher risk
+  small_cap:
+    - "ROKU"    # Roku Inc
+    - "SNAP"    # Snap Inc
+    - "TWLO"    # Twilio Inc
+    - "SQ"      # Block Inc (formerly Square)
+    - "DKNG"    # DraftKings Inc
+    - "PLTR"    # Palantir Technologies
+    - "RBLX"    # Roblox Corp
+    - "COIN"    # Coinbase Global Inc
+    - "RIVN"    # Rivian Automotive Inc
+    - "LCID"    # Lucid Group Inc
+    - "SOFI"    # SoFi Technologies Inc
+    - "HOOD"    # Robinhood Markets Inc
+    - "UPST"    # Upstart Holdings Inc
+    - "AFRM"    # Affirm Holdings Inc
+    - "PINS"    # Pinterest Inc
+
+  # Your custom portfolio - modify these tickers as needed
+  my_portfolio:
+    - "SO"    # Replace with your chosen stocks
+    - "GOOGL"    # Add up to 15-20 stocks
+    - "U"   # Remove or change any of these
+    - "RIVN"    # This is just a template
+    - "NVDA"    # Customize for your analysis
+    - "XOM"
+    - "KO"
+    - "JEPI"
+    - "BBAI"
+    - "CAVA"
+    - "RDDT"
+    - "HAS"
+    - "JOBY"
+    - "SOFI"
+    - "PTC"
+
+# Market benchmarks and ETFs (used as context in all portfolios)
+market_context:
+  - "^GSPC"   # S&P 500 Index
+  - "^IXIC"   # NASDAQ Composite
+  - "^DJI"    # Dow Jones Industrial Average
+  - "QQQ"     # Invesco QQQ Trust (NASDAQ-100)
+  - "SPY"     # SPDR S&P 500 ETF
+  - "IWM"     # iShares Russell 2000 ETF
+  - "VTI"     # Vanguard Total Stock Market ETF
+  - "AGG"     # iShares Core US Aggregate Bond ETF
+
+# Output configuration
+output:
+  results_dir: "results/batch_analysis"
+  save_individual_runs: true
+  save_summary_csv: true
+  save_detailed_json: true
+
+# Analysis options
+analysis_options:
+  # Skip certain analysis phases for faster execution
+  skip_patterns: false
+  skip_temporal: false
+  skip_features: false
+  
+  # Quick mode settings (used when --quick flag is passed)
+  quick_mode:
+    hidden_sizes: [50]
+    sequence_lengths: [30]
+    num_epochs: 50
+    skip_patterns: true
+    skip_temporal: true
+    
+  # Performance thresholds for flagging good/bad results
+  performance_thresholds:
+    excellent_sharpe: 1.5
+    good_sharpe: 1.0
+    poor_sharpe: 0.5
+    excellent_excess_return: 0.15  # 15% excess return
+    good_excess_return: 0.05       # 5% excess return
+    excellent_directional_accuracy: 0.65  # 65% accuracy
+    good_directional_accuracy: 0.55       # 55% accuracy
+
+# Execution settings
+execution:
+  max_parallel_runs: 1  # Number of runs to execute in parallel (keep at 1 for Jetson)
+  save_intermediate_every: 5  # Save results every N runs
+  auto_cleanup_temp_files: true
+  
+# Notification settings (for long batch runs)
+notifications:
+  email_on_completion: false
+  email_address: "your_email@example.com"
+  send_progress_updates: false
+  progress_update_interval: 10  # Every N runs
