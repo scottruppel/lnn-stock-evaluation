@@ -673,4 +673,477 @@ class WalkForwardBacktester:
         print(f"RMSE: {prediction_metrics['overall_rmse']:.4f}")
         
         print(f"\n⏱️  PERFORMANCE:")
-        print(f"Avg Training Time: {period_stats['avg_training_time
+        print(f"Avg Training Time: {period_stats['avg_training_time']:.1f}s")
+        print(f"Avg Prediction Time: {period_stats['avg_prediction_time']:.1f}s")
+        print(f"Successful Periods: {period_stats['successful_periods']}/{period_stats['num_periods']}")
+        
+        # Performance verdict
+        if trading_metrics['excess_return'] > 0.05:  # 5% outperformance
+            verdict = "🟢 STRONG PERFORMANCE"
+        elif trading_metrics['excess_return'] > 0:
+            verdict = "🟡 MODEST OUTPERFORMANCE"
+        elif trading_metrics['excess_return'] > -0.05:
+            verdict = "🟠 NEUTRAL PERFORMANCE"
+        else:
+            verdict = "🔴 UNDERPERFORMANCE"
+        
+        print(f"\n{verdict}")
+    
+    def save_backtest_results(self, filepath: str = None):
+        """Save comprehensive backtest results to file."""
+        
+        if not self.overall_results:
+            print("No backtest results to save")
+            return
+        
+        if filepath is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            target = getattr(self, 'target_ticker', 'unknown')
+            filepath = f"results/backtests/backtest_{target}_{self.config.mode.value}_{timestamp}.json"
+        
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        with open(filepath, 'w') as f:
+            json.dump(self.overall_results, f, indent=2, default=str)
+        
+        print(f"✓ Backtest results saved to: {filepath}")
+        return filepath
+    
+    def plot_results(self, save_path: str = None):
+        """Generate comprehensive backtesting plots."""
+        
+        if not self.period_results:
+            print("No results to plot")
+            return
+        
+        # Prepare data for plotting
+        all_strategy_returns = []
+        all_benchmark_returns = []
+        all_predictions = []
+        all_actuals = []
+        period_labels = []
+        
+        for result in self.period_results:
+            all_strategy_returns.extend(result.strategy_returns)
+            all_benchmark_returns.extend(result.benchmark_returns)
+            all_predictions.extend(result.predictions)
+            all_actuals.extend(result.actuals)
+            period_labels.extend([f"P{result.period.period_id}"] * len(result.strategy_returns))
+        
+        # Create subplots
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        fig.suptitle(f'Backtesting Results - {getattr(self, "target_ticker", "Unknown")}', fontsize=16)
+        
+        # 1. Cumulative Returns
+        strategy_cumret = np.cumsum(all_strategy_returns)
+        benchmark_cumret = np.cumsum(all_benchmark_returns)
+        
+        axes[0, 0].plot(strategy_cumret, label='Strategy', linewidth=2)
+        axes[0, 0].plot(benchmark_cumret, label='Benchmark', linewidth=2)
+        axes[0, 0].set_title('Cumulative Returns')
+        axes[0, 0].set_xlabel('Days')
+        axes[0, 0].set_ylabel('Cumulative Return')
+        axes[0, 0].legend()
+        axes[0, 0].grid(True, alpha=0.3)
+        
+        # 2. Prediction vs Actual
+        axes[0, 1].scatter(all_actuals, all_predictions, alpha=0.6, s=20)
+        axes[0, 1].plot([min(all_actuals), max(all_actuals)], [min(all_actuals), max(all_actuals)], 'r--', linewidth=2)
+        axes[0, 1].set_title('Predictions vs Actual Returns')
+        axes[0, 1].set_xlabel('Actual Returns')
+        axes[0, 1].set_ylabel('Predicted Returns')
+        axes[0, 1].grid(True, alpha=0.3)
+        
+        # Add correlation text
+        correlation = np.corrcoef(all_predictions, all_actuals)[0, 1]
+        axes[0, 1].text(0.05, 0.95, f'Correlation: {correlation:.3f}', 
+                       transform=axes[0, 1].transAxes, fontsize=12, 
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        # 3. Period-by-Period Returns
+        period_returns = [result.metrics['total_return'] for result in self.period_results]
+        period_ids = [result.period.period_id for result in self.period_results]
+        
+        colors = ['green' if ret > 0 else 'red' for ret in period_returns]
+        axes[1, 0].bar(period_ids, period_returns, color=colors, alpha=0.7)
+        axes[1, 0].set_title('Period Returns')
+        axes[1, 0].set_xlabel('Period')
+        axes[1, 0].set_ylabel('Return')
+        axes[1, 0].axhline(y=0, color='black', linestyle='-', alpha=0.3)
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # 4. Rolling Sharpe Ratio
+        window = 21  # 21-day rolling window
+        if len(all_strategy_returns) > window:
+            rolling_sharpe = []
+            for i in range(window, len(all_strategy_returns)):
+                returns_window = all_strategy_returns[i-window:i]
+                if len(returns_window) > 0 and np.std(returns_window) > 0:
+                    sharpe = np.mean(returns_window) / np.std(returns_window) * np.sqrt(252)
+                    rolling_sharpe.append(sharpe)
+                else:
+                    rolling_sharpe.append(0)
+            
+            axes[1, 1].plot(range(window, len(all_strategy_returns)), rolling_sharpe, linewidth=2)
+            axes[1, 1].set_title(f'{window}-Day Rolling Sharpe Ratio')
+            axes[1, 1].set_xlabel('Days')
+            axes[1, 1].set_ylabel('Sharpe Ratio')
+            axes[1, 1].axhline(y=0, color='black', linestyle='-', alpha=0.3)
+            axes[1, 1].axhline(y=1, color='green', linestyle='--', alpha=0.5, label='Sharpe = 1')
+            axes[1, 1].grid(True, alpha=0.3)
+            axes[1, 1].legend()
+        else:
+            axes[1, 1].text(0.5, 0.5, 'Insufficient data\nfor rolling Sharpe', 
+                           ha='center', va='center', transform=axes[1, 1].transAxes, fontsize=12)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"✓ Plots saved to: {save_path}")
+        
+        plt.show()
+        return fig
+    
+    def get_feature_importance_over_time(self) -> Dict[str, List[float]]:
+        """
+        Analyze how feature importance changes over time (if using tree-based models).
+        For LNN, this returns prediction correlation with features over time.
+        """
+        if not self.feature_names or not self.period_results:
+            return {}
+        
+        print("📊 Analyzing feature importance over time...")
+        
+        feature_importance = {name: [] for name in self.feature_names}
+        
+        for result in self.period_results:
+            period = result.period
+            predictions = result.predictions
+            
+            # Calculate correlation between predictions and each feature
+            for i, feature_name in enumerate(self.feature_names):
+                feature_values = self.features[period.test_start:period.test_end, i]
+                
+                if len(feature_values) == len(predictions) and np.std(feature_values) > 0:
+                    correlation = np.corrcoef(predictions, feature_values)[0, 1]
+                    feature_importance[feature_name].append(abs(correlation))
+                else:
+                    feature_importance[feature_name].append(0.0)
+        
+        return feature_importance
+    
+    def analyze_regime_performance(self) -> Dict[str, Any]:
+        """
+        Analyze performance across different market regimes.
+        """
+        if not self.period_results:
+            return {}
+        
+        print("📈 Analyzing regime-based performance...")
+        
+        # Simple regime classification based on benchmark returns
+        regime_results = {'bull': [], 'bear': [], 'sideways': []}
+        
+        for result in self.period_results:
+            benchmark_return = result.metrics['benchmark_return']
+            
+            if benchmark_return > 0.02:  # >2% benchmark return
+                regime = 'bull'
+            elif benchmark_return < -0.02:  # <-2% benchmark return
+                regime = 'bear'
+            else:
+                regime = 'sideways'
+            
+            regime_results[regime].append({
+                'period_id': result.period.period_id,
+                'strategy_return': result.metrics['total_return'],
+                'benchmark_return': benchmark_return,
+                'excess_return': result.metrics['excess_return'],
+                'sharpe_ratio': result.metrics['sharpe_ratio'],
+                'hit_rate': result.metrics['hit_rate']
+            })
+        
+        # Calculate regime statistics
+        regime_stats = {}
+        for regime, results in regime_results.items():
+            if results:
+                regime_stats[regime] = {
+                    'count': len(results),
+                    'avg_strategy_return': np.mean([r['strategy_return'] for r in results]),
+                    'avg_benchmark_return': np.mean([r['benchmark_return'] for r in results]),
+                    'avg_excess_return': np.mean([r['excess_return'] for r in results]),
+                    'avg_sharpe': np.mean([r['sharpe_ratio'] for r in results]),
+                    'avg_hit_rate': np.mean([r['hit_rate'] for r in results]),
+                    'win_rate': np.mean([1 if r['strategy_return'] > 0 else 0 for r in results])
+                }
+            else:
+                regime_stats[regime] = {'count': 0}
+        
+        return {
+            'regime_classification': regime_results,
+            'regime_statistics': regime_stats
+        }
+
+
+class BacktestIntegrator:
+    """
+    Integration helpers to connect backtesting with your existing pipeline.
+    """
+    
+    @staticmethod
+    def integrate_with_run_analysis(analyzer_class):
+        """
+        Add backtesting capabilities to your ComprehensiveAnalyzer class.
+        """
+        
+        def run_comprehensive_backtest(self, backtest_config: BacktestConfig = None):
+            """
+            Add this method to your ComprehensiveAnalyzer class.
+            
+            Run comprehensive backtesting as part of your analysis pipeline.
+            """
+            print("=" * 70)
+            print("PHASE 3.5: COMPREHENSIVE BACKTESTING")
+            print("=" * 70)
+            
+            # Use default config if none provided
+            if backtest_config is None:
+                backtest_config = BacktestConfig(
+                    mode=BacktestMode.WALK_FORWARD,
+                    initial_train_days=252,    # 1 year
+                    retrain_frequency=21,      # Monthly
+                    test_period_days=21        # Test on next month
+                )
+            
+            # Initialize backtester
+            backtester = WalkForwardBacktester(backtest_config)
+            
+            # Prepare data (use your existing data)
+            if not hasattr(self, 'data_loader') or not self.data_loader:
+                raise ValueError("Data not loaded. Run analyze_raw_data() first.")
+            
+            price_data = self.data_loader.get_closing_prices()
+            target_ticker = self.config['data']['target_ticker']
+            
+            # Prepare backtesting data
+            backtester.prepare_data(
+                price_data=price_data,
+                target_ticker=target_ticker,
+                config=self.config,
+                use_enhanced_features=True  # Use your market abstraction features
+            )
+            
+            # Run backtest
+            backtest_results = backtester.run_backtest()
+            
+            # Store results
+            self.analysis_results['backtesting'] = backtest_results
+            
+            # Save results
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backtest_file = f"results/backtests/backtest_{self.experiment_name}_{timestamp}.json"
+            backtester.save_backtest_results(backtest_file)
+            
+            # Generate plots
+            if backtest_config.plot_results:
+                plot_file = f"results/backtests/backtest_plots_{self.experiment_name}_{timestamp}.png"
+                backtester.plot_results(plot_file)
+            
+            print(f"✅ Comprehensive backtesting completed!")
+            print(f"   Results saved to: {backtest_file}")
+            
+            return backtest_results
+        
+        # Add the method to the class
+        analyzer_class.run_comprehensive_backtest = run_comprehensive_backtest
+        return analyzer_class
+    
+    @staticmethod
+    def create_backtest_only_script():
+        """
+        Create a standalone backtesting script for your pipeline.
+        """
+        
+        script_content = '''#!/usr/bin/env python3
+"""
+Standalone Backtesting Script for LNN Pipeline
+Run this to backtest your models without full analysis pipeline.
+
+Usage on Jetson Nano:
+    python scripts/run_backtest.py --config config/config.yaml --target AAPL
+    python scripts/run_backtest.py --quick  # Quick backtest with default settings
+"""
+
+import os
+import sys
+import argparse
+import yaml
+from datetime import datetime
+
+# Add paths
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from data.data_loader import StockDataLoader
+from evaluation.backtester import WalkForwardBacktester, BacktestConfig, BacktestMode
+
+def main():
+    parser = argparse.ArgumentParser(description='Run backtesting for LNN models')
+    parser.add_argument('--config', type=str, default='config/config.yaml', help='Config file path')
+    parser.add_argument('--target', type=str, help='Target ticker (overrides config)')
+    parser.add_argument('--mode', type=str, default='walk_forward', 
+                       choices=['walk_forward', 'rolling_window', 'time_series_split'],
+                       help='Backtesting mode')
+    parser.add_argument('--quick', action='store_true', help='Quick backtest with minimal periods')
+    parser.add_argument('--plot', action='store_true', help='Generate plots')
+    
+    args = parser.parse_args()
+    
+    # Load config
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Override target if specified
+    if args.target:
+        config['data']['target_ticker'] = args.target
+    
+    # Create backtest config
+    if args.quick:
+        backtest_config = BacktestConfig(
+            mode=BacktestMode(args.mode),
+            initial_train_days=100,  # Shorter for quick test
+            retrain_frequency=10,
+            test_period_days=10,
+            plot_results=args.plot
+        )
+    else:
+        backtest_config = BacktestConfig(
+            mode=BacktestMode(args.mode),
+            initial_train_days=252,
+            retrain_frequency=21,
+            test_period_days=21,
+            plot_results=args.plot
+        )
+    
+    print(f"🚀 Starting backtesting for {config['data']['target_ticker']}")
+    print(f"   Mode: {args.mode}")
+    print(f"   Quick: {args.quick}")
+    
+    try:
+        # Load data
+        data_loader = StockDataLoader(
+            tickers=config['data']['tickers'],
+            start_date=config['data']['start_date'],
+            end_date=config['data']['end_date']
+        )
+        
+        raw_data = data_loader.download_data()
+        price_data = data_loader.get_closing_prices()
+        
+        # Initialize backtester
+        backtester = WalkForwardBacktester(backtest_config)
+        
+        # Prepare data
+        backtester.prepare_data(
+            price_data=price_data,
+            target_ticker=config['data']['target_ticker'],
+            config=config,
+            use_enhanced_features=True
+        )
+        
+        # Run backtest
+        results = backtester.run_backtest()
+        
+        # Save results
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_file = f"results/backtests/standalone_backtest_{timestamp}.json"
+        backtester.save_backtest_results(results_file)
+        
+        if args.plot:
+            plot_file = f"results/backtests/standalone_plots_{timestamp}.png"
+            backtester.plot_results(plot_file)
+        
+        print(f"\\n✅ Backtesting completed successfully!")
+        print(f"   Results: {results_file}")
+        
+    except Exception as e:
+        print(f"❌ Backtesting failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    main()
+'''
+        
+        return script_content
+
+
+# Example usage and testing functions
+def test_backtesting_system():
+    """Test the backtesting system with sample data."""
+    
+    print("🧪 Testing Backtesting System...")
+    print("=" * 40)
+    
+    try:
+        # Load sample data
+        from data.data_loader import StockDataLoader
+        
+        data_loader = StockDataLoader(['AAPL', 'SPY'], '2022-01-01', '2024-01-01')
+        raw_data = data_loader.download_data()
+        price_data = data_loader.get_closing_prices()
+        
+        # Test config
+        config = {
+            'data': {'target_ticker': 'AAPL'},
+            'model': {
+                'hidden_size': 32,
+                'sequence_length': 20,
+                'learning_rate': 0.001,
+                'batch_size': 16,
+                'num_epochs': 50,
+                'patience': 5
+            }
+        }
+        
+        # Quick backtest config
+        backtest_config = BacktestConfig(
+            mode=BacktestMode.WALK_FORWARD,
+            initial_train_days=100,
+            retrain_frequency=20,
+            test_period_days=10,
+            early_stopping=True,
+            plot_results=False  # Don't plot during test
+        )
+        
+        # Initialize and run backtester
+        backtester = WalkForwardBacktester(backtest_config)
+        backtester.prepare_data(price_data, 'AAPL', config, use_enhanced_features=False)
+        
+        results = backtester.run_backtest()
+        
+        print(f"✅ Backtesting test completed!")
+        print(f"   Strategy Return: {results['trading_metrics']['total_strategy_return']:.3f}")
+        print(f"   Sharpe Ratio: {results['trading_metrics']['strategy_sharpe']:.2f}")
+        print(f"   Directional Accuracy: {results['prediction_metrics']['overall_directional_accuracy']:.1%}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Backtesting test failed: {e}")
+        return False
+
+
+if __name__ == "__main__":
+    # Run test if script is executed directly
+    success = test_backtesting_system()
+    
+    if success:
+        print("\n🎉 Backtesting system is ready for integration!")
+        print("\nNext steps:")
+        print("1. Save this as src/evaluation/backtester.py")
+        print("2. Create results/backtests/ directory")
+        print("3. Add backtesting to your run_analysis.py")
+        print("4. Run: python scripts/run_analysis.py --experiment-name 'backtest_test'")
+    else:
+        print("\n⚠️  Fix the issues above before integrating backtesting")
