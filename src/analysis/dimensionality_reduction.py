@@ -283,37 +283,130 @@ class DimensionalityReducer:
         transformed = self.fitted_models[method].transform(features_scaled)
         return transformed
     
-    def get_feature_rankings(self, feature_names: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+    def get_feature_rankings(self, feature_names: list) -> dict:
         """
-        Get feature importance rankings for all fitted methods.
+        Get feature rankings from different methods with robust error handling.
         
         Args:
-            feature_names: List of feature names (optional)
-        
+            feature_names: List of feature names
+            
         Returns:
-            Dictionary of DataFrames with feature rankings for each method
+            Dictionary of ranking DataFrames for each method
         """
         rankings = {}
         
-        for method, importance in self.feature_importance.items():
-            # Create feature names if not provided
-            if feature_names is None:
-                names = [f'feature_{i}' for i in range(len(importance))]
-            else:
-                names = feature_names[:len(importance)]
-            
-            # Create ranking DataFrame
-            ranking_df = pd.DataFrame({
-                'feature_name': names,
-                'importance': importance,
-                'rank': range(1, len(importance) + 1)
-            }).sort_values('importance', ascending=False).reset_index(drop=True)
-            
-            # Update ranks
-            ranking_df['rank'] = range(1, len(ranking_df) + 1)
-            
-            rankings[method] = ranking_df
+        # Ensure we have feature names
+        if not feature_names or len(feature_names) == 0:
+            print("Warning: No feature names provided for ranking")
+            return rankings
         
+        print(f"Creating feature rankings for {len(feature_names)} features")
+        
+        # Helper function to safely create ranking DataFrame
+        def create_safe_ranking_df(method_name: str, scores: np.ndarray, names: list) -> pd.DataFrame:
+            """Create a ranking DataFrame with length validation."""
+            try:
+                # Convert scores to numpy array if it isn't already
+                if not isinstance(scores, np.ndarray):
+                    scores = np.array(scores)
+                
+                # Handle empty or invalid scores
+                if scores is None or len(scores) == 0:
+                    print(f"Warning: No scores available for {method_name}")
+                    return pd.DataFrame()
+                
+                # Remove any NaN or infinite values
+                valid_mask = np.isfinite(scores)
+                if not np.any(valid_mask):
+                    print(f"Warning: No valid scores for {method_name}")
+                    return pd.DataFrame()
+                
+                valid_scores = scores[valid_mask]
+                valid_names = [names[i] for i in range(len(names)) if i < len(valid_mask) and valid_mask[i]]
+                
+                # Ensure we have matching lengths
+                min_length = min(len(valid_scores), len(valid_names))
+                if min_length == 0:
+                    print(f"Warning: No valid features for {method_name}")
+                    return pd.DataFrame()
+                
+                final_scores = valid_scores[:min_length]
+                final_names = valid_names[:min_length]
+                
+                # Create ranks (higher scores = better ranks, so we use negative for argsort)
+                ranks = np.argsort(-final_scores) + 1  # +1 to make ranks start from 1
+                
+                # Verify all arrays have same length before creating DataFrame
+                assert len(final_names) == len(final_scores) == len(ranks), \
+                    f"Length mismatch in {method_name}: names={len(final_names)}, scores={len(final_scores)}, ranks={len(ranks)}"
+                
+                # Create DataFrame
+                df = pd.DataFrame({
+                    'feature_name': final_names,
+                    'score': final_scores,
+                    'rank': ranks
+                })
+                
+                # Sort by rank
+                df = df.sort_values('rank').reset_index(drop=True)
+                
+                print(f"✓ Created {method_name} ranking with {len(df)} features")
+                return df
+                
+            except Exception as e:
+                print(f"Error creating ranking for {method_name}: {e}")
+                return pd.DataFrame()
+        
+        # Try different ranking methods if they exist
+        ranking_methods = []
+        
+        # Check for PCA results
+        if hasattr(self, 'pca_') and self.pca_ is not None:
+            try:
+                # Use explained variance ratio as importance scores
+                if hasattr(self.pca_, 'components_') and self.pca_.components_ is not None:
+                    # Sum of absolute values across all components
+                    feature_importance = np.abs(self.pca_.components_).sum(axis=0)
+                    ranking_methods.append(('PCA', feature_importance))
+            except Exception as e:
+                print(f"Could not create PCA ranking: {e}")
+        
+        # Check for feature selection results
+        if hasattr(self, 'feature_selector_') and self.feature_selector_ is not None:
+            try:
+                if hasattr(self.feature_selector_, 'scores_'):
+                    ranking_methods.append(('Feature_Selection', self.feature_selector_.scores_))
+                elif hasattr(self.feature_selector_, 'ranking_'):
+                    # For RFE, lower ranking is better, so we invert
+                    inverted_ranks = 1.0 / (self.feature_selector_.ranking_ + 1e-8)
+                    ranking_methods.append(('Feature_Selection', inverted_ranks))
+            except Exception as e:
+                print(f"Could not create feature selection ranking: {e}")
+        
+        # Check for variance threshold results
+        if hasattr(self, 'variance_selector_') and self.variance_selector_ is not None:
+            try:
+                if hasattr(self.variance_selector_, 'variances_'):
+                    ranking_methods.append(('Variance', self.variance_selector_.variances_))
+            except Exception as e:
+                print(f"Could not create variance ranking: {e}")
+        
+        # Create rankings for each method
+        for method_name, scores in ranking_methods:
+            ranking_df = create_safe_ranking_df(method_name, scores, feature_names)
+            if not ranking_df.empty:
+                rankings[method_name] = ranking_df
+        
+        # If no rankings were created, create a simple default ranking
+        if not rankings:
+            print("Warning: No valid rankings created, using default feature order")
+            try:
+                default_scores = np.arange(len(feature_names), 0, -1)  # Descending order
+                rankings['Default'] = create_safe_ranking_df('Default', default_scores, feature_names)
+            except Exception as e:
+                print(f"Error creating default ranking: {e}")
+        
+        print(f"✓ Created {len(rankings)} feature ranking methods")
         return rankings
     
     def compare_dimensionality_methods(self, features: np.ndarray, targets: np.ndarray,
