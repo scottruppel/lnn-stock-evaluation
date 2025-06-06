@@ -117,12 +117,38 @@ class LNNTrainer:
         )
         
         raw_data = self.data_loader.download_data()
-        price_data = self.data_loader.get_closing_prices()
+        price_data = self.prepare_data_with_enhanced_features()
+        
+        def debug_data_flow(self, price_data):
+            """Debug what's happening to your enhanced features."""
+    
+            print("\n🔍 DEBUGGING DATA FLOW:")
+            print("=" * 50)
+    
+            target_ticker = self.config['data']['target_ticker']
+    
+            print(f"Target ticker: {target_ticker}")
+            print(f"Price data keys: {list(price_data.keys())}")
+    
+            for ticker, data in price_data.items():
+                print(f"{ticker}: shape = {data.shape}, type = {type(data)}")
+        
+                if ticker == target_ticker and len(data.shape) > 1:
+                    print(f"  ✅ {ticker} has enhanced features: {data.shape[1]} features")
+                elif ticker == target_ticker:
+                    print(f"  ❌ {ticker} still has basic data: {data.shape}")
+        
+                # Check first few values
+                if hasattr(data, 'flatten'):
+                    flat_data = data.flatten()
+                    print(f"  Sample values: [{flat_data[0]:.3f}, {flat_data[1]:.3f}, ...]")
+    
+            return price_data
         
         print(f"Loaded data for {len(price_data)} tickers")
         print(f"Data shape for each ticker: {next(iter(price_data.values())).shape}")
         
-        # 2. Optional: Add engineered features
+        # 2. Check if enhanced features are already created
         if self.config.get('analysis', {}).get('use_advanced_features', False):
             print("Creating advanced features...")
             engineer = AdvancedFeatureEngineer()
@@ -198,6 +224,111 @@ class LNNTrainer:
         print(f"Training set: {self.train_data['X'].shape}")
         print(f"Validation set: {self.val_data['X'].shape}")
         print(f"Test set: {self.test_data['X'].shape}")
+        
+    def prepare_data_with_enhanced_features(self):
+        """Enhanced version with extensive debugging."""
+    
+        print("🔍 ENHANCED FEATURE DEBUG")
+        print("=" * 50)
+    
+        # Get basic price data first
+        price_data = self.data_loader.get_closing_prices()
+        target_ticker = self.config['data']['target_ticker']
+    
+        print(f"🔍 STEP 1: Original price data")
+        for ticker, data in price_data.items():
+            print(f"   {ticker}: {data.shape}")
+    
+        # Check if enhanced features are enabled
+        use_enhanced = self.config.get('analysis', {}).get('use_advanced_features', False)
+        use_abstractions = self.config.get('analysis', {}).get('use_abstractions', False)
+    
+        print(f"🔍 STEP 2: Feature flags")
+        print(f"   use_advanced_features: {use_enhanced}")
+        print(f"   use_abstractions: {use_abstractions}")
+    
+        if use_enhanced or use_abstractions:
+            try:
+                print("🔍 STEP 3: Creating enhanced features...")
+            
+                from analysis.market_abstraction_pipeline import EnhancedFeatureEngineer
+                enhanced_engineer = EnhancedFeatureEngineer(use_abstractions=use_abstractions)
+            
+                # Create OHLCV approximation
+                target_prices = price_data[target_ticker]
+                print(f"   Target prices shape: {target_prices.shape}")
+            
+                ohlcv_data = {
+                    'close': target_prices,
+                    'high': target_prices * 1.02,
+                    'low': target_prices * 0.98,
+                    'open': target_prices,
+                    'volume': np.ones_like(target_prices) * 1000000
+                }
+            
+                # Create enhanced features
+                features, feature_names = enhanced_engineer.create_features_with_abstractions(
+                    price_data=price_data,
+                    target_ticker=target_ticker,
+                    ohlcv_data=ohlcv_data
+                )
+            
+                print(f"🔍 STEP 4: Enhanced features created")
+                print(f"   Features shape: {features.shape}")
+                print(f"   Feature count: {len(feature_names)}")
+            
+                # CRITICAL: Replace ONLY the target ticker with enhanced features
+                enhanced_price_data = {}
+                for ticker, data in price_data.items():
+                    if ticker == target_ticker:
+                        print(f"🔍 STEP 5: Replacing {ticker} data")
+                        print(f"   Original: {data.shape}")
+                        print(f"   Enhanced: {features.shape}")
+                        enhanced_price_data[ticker] = features
+                    else:
+                        enhanced_price_data[ticker] = data
+            
+                print(f"🔍 STEP 6: Final enhanced_price_data")
+                for ticker, data in enhanced_price_data.items():
+                    print(f"   {ticker}: {data.shape}")
+            
+                return enhanced_price_data
+            
+            except Exception as e:
+                print(f"❌ Error creating enhanced features: {e}")
+                import traceback
+                traceback.print_exc()
+                print("   Falling back to basic features...")
+                return price_data
+    
+        else:
+            print("🔍 STEP 3: Using basic price features (enhanced disabled)")
+            return price_data
+            
+    def debug_final_data_shapes(self):
+        """Debug the final data shapes before training."""
+    
+        print("\n🔍 FINAL DATA SHAPES DEBUG:")
+        print("=" * 50)
+    
+        print(f"Train data: {self.train_data['X'].shape}")
+        print(f"Val data: {self.val_data['X'].shape}")
+        print(f"Test data: {self.test_data['X'].shape}")
+    
+        print(f"Model expects input size: {self.train_data['X'].shape[2]}")
+    
+        # Check if this makes sense
+        expected_samples = 752 - 45  # Original data - sequence length
+        actual_samples = self.train_data['X'].shape[0] + self.val_data['X'].shape[0]
+    
+        print(f"Expected samples: ~{expected_samples}")
+        print(f"Actual samples: {actual_samples}")
+    
+        if actual_samples > expected_samples * 10:
+            print("❌ WARNING: Data explosion detected!")
+            print("   The preprocessing is creating too many samples")
+    
+        return True
     
     def initialize_model(self):
         """Initialize the LNN model and optimizer."""

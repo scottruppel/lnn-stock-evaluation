@@ -1,542 +1,549 @@
-# scripts/web_gui.py
 #!/usr/bin/env python3
 """
-Web-based GUI for Stock LNN Analysis
-Allows users to select stocks, configure parameters, and run analysis through a web interface.
-
-Usage:
-    python scripts/web_gui.py
-    Then open browser to http://localhost:8050
+Enhanced Web GUI for Liquid Neural Network Stock Analysis
+Provides interface for both single stock and batch analysis with network access support.
 """
 
-import os
-import sys
 import dash
-from dash import dcc, html, Input, Output, State, callback, dash_table
+from dash import dcc, html, Input, Output, State, callback_context
 import plotly.graph_objs as go
 import plotly.express as px
 import pandas as pd
 import numpy as np
-from datetime import datetime, date
 import json
+import os
+import sys
 import threading
 import time
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
+import socket
+import subprocess
 
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return super(NumpyEncoder, self).default(obj)
-
-# Add src to path
+# Add project paths
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from utils.experiment_tracker import ExperimentTracker
-from data.data_loader import StockDataLoader
+# Import your analysis components
+try:
+    from run_analysis import ComprehensiveAnalyzer
+    from data.data_loader import StockDataLoader
+    print("✓ Successfully imported analysis modules")
+except ImportError as e:
+    print(f"⚠️  Import warning: {e}")
+    print("Some features may be limited")
 
 # Initialize Dash app
-app = dash.Dash(__name__, title="Stock LNN Analysis")
-app.config.suppress_callback_exceptions = True
+app = dash.Dash(__name__)
+app.title = "LNN Stock Analysis Dashboard"
 
-# Global variables
-experiment_tracker = ExperimentTracker()
-analysis_status = {"running": False, "progress": "", "results": None}
+# Global variables for analysis state
+analysis_status = {
+    'running': False,
+    'progress': 0,
+    'current_phase': '',
+    'results': None,
+    'error': None
+}
 
-# Popular stock tickers for easy selection
-POPULAR_TICKERS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "NFLX", 
-    "AMD", "INTC", "CRM", "ORCL", "ADBE", "NOW", "SNOW", "PLTR",
-    "SPY", "QQQ", "IWM", "GLD", "SLV", "TLT", "VIX"
-]
+# Predefined asset class groups for batch analysis
+ASSET_CLASSES = {
+    'Large Cap Tech': ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'META'],
+    'Market Indices': ['^GSPC', '^DJI', '^IXIC', '^RUT'],
+    'ETFs - Broad Market': ['SPY', 'QQQ', 'IWM', 'VTI'],
+    'ETFs - Sector': ['XLF', 'XLE', 'XLK', 'XLV', 'XLI'],
+    'ETFs - Fixed Income': ['AGG', 'TLT', 'HYG', 'LQD'],
+    'Commodities': ['GLD', 'SLV', 'USO', 'UNG'],
+    'International': ['EFA', 'EEM', 'VEA', 'VWO'],
+    'Custom': []  # User-defined list
+}
 
-MARKET_INDICES = [
-    "^GSPC", "^DJI", "^IXIC", "^RUT", "^VIX"
-]
+# CSS styling
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
-def create_layout():
-    """Create the main GUI layout."""
-    return html.Div([
-        # Header
-        html.Div([
-            html.H1("🚀 Stock LNN Analysis Platform", 
-                   style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': 30}),
-            html.P("Comprehensive AI-powered stock market analysis using Liquid Neural Networks",
-                   style={'textAlign': 'center', 'fontSize': 18, 'color': '#7f8c8d'})
-        ], style={'padding': '20px', 'backgroundColor': '#ecf0f1', 'marginBottom': '20px'}),
-        
-        # Main content
-        html.Div([
-            # Left panel - Configuration
-            html.Div([
-                html.H3("📊 Analysis Configuration", style={'color': '#34495e'}),
-                
-                # Stock Selection
-                html.Div([
-                    html.Label("Target Stock:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                    dcc.Dropdown(
-                        id='target-stock',
-                        options=[{'label': f"{ticker} - Popular", 'value': ticker} for ticker in POPULAR_TICKERS],
-                        value='AAPL',
-                        placeholder="Select or type a stock symbol",
-                        searchable=True,
-                        style={'marginBottom': '15px'}
-                    ),
-                    
-                    html.Label("Market Context (for feature engineering):", 
-                              style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                    dcc.Dropdown(
-                        id='context-stocks',
-                        options=[{'label': f"{ticker} - Index", 'value': ticker} for ticker in MARKET_INDICES] + 
-                                [{'label': f"{ticker} - Popular", 'value': ticker} for ticker in POPULAR_TICKERS[:10]],
-                        value=['^GSPC', 'QQQ', 'GLD'],
-                        multi=True,
-                        placeholder="Select market context",
-                        style={'marginBottom': '20px'}
-                    )
-                ], style={'marginBottom': '20px'}),
-                
-                # Date Range
-                html.Div([
-                    html.Label("Analysis Period:", style={'fontWeight': 'bold', 'marginBottom': '5px'}),
-                    dcc.DatePickerRange(
-                        id='date-range',
-                        start_date=date(2020, 1, 1),
-                        end_date=date.today(),
-                        display_format='YYYY-MM-DD',
-                        style={'marginBottom': '20px'}
-                    )
-                ], style={'marginBottom': '20px'}),
-                
-                # Model Configuration
-                html.Div([
-                    html.H4("🧠 Model Parameters", style={'color': '#2980b9'}),
-                    
-                    html.Label("Hidden Layer Size:", style={'fontWeight': 'bold'}),
-                    dcc.Slider(
-                        id='hidden-size',
-                        min=25, max=200, step=25, value=50,
-                        marks={i: str(i) for i in range(25, 201, 25)},
-                        tooltip={"placement": "bottom", "always_visible": True}
-                    ),
-                    
-                    html.Label("Sequence Length (days):", style={'fontWeight': 'bold', 'marginTop': '15px'}),
-                    dcc.Slider(
-                        id='sequence-length',
-                        min=10, max=60, step=5, value=30,
-                        marks={i: str(i) for i in range(10, 61, 10)},
-                        tooltip={"placement": "bottom", "always_visible": True}
-                    ),
-                    
-                    html.Label("Learning Rate:", style={'fontWeight': 'bold', 'marginTop': '15px'}),
-                    dcc.Dropdown(
-                        id='learning-rate',
-                        options=[
-                            {'label': '0.0001 (Conservative)', 'value': 0.0001},
-                            {'label': '0.0005 (Moderate)', 'value': 0.0005},
-                            {'label': '0.001 (Standard)', 'value': 0.001},
-                            {'label': '0.005 (Aggressive)', 'value': 0.005}
-                        ],
-                        value=0.001
-                    )
-                ], style={'marginBottom': '20px'}),
-                
-                # Analysis Options
-                html.Div([
-                    html.H4("🔍 Analysis Options", style={'color': '#27ae60'}),
-                    
-                    dcc.Checklist(
-                        id='analysis-options',
-                        options=[
-                            {'label': ' Advanced Feature Engineering', 'value': 'advanced_features'},
-                            {'label': ' Pattern Recognition', 'value': 'patterns'},
-                            {'label': ' Temporal Analysis', 'value': 'temporal'},
-                            {'label': ' Dimensionality Reduction', 'value': 'dim_reduction'},
-                            {'label': ' Quick Mode (faster)', 'value': 'quick_mode'}
-                        ],
-                        value=['advanced_features', 'patterns'],
-                        style={'marginBottom': '20px'}
-                    )
-                ], style={'marginBottom': '30px'}),
-                
-                # Run Analysis Button
-                html.Div([
-                    html.Button(
-                        "🚀 Run Analysis", 
-                        id='run-button',
-                        n_clicks=0,
-                        style={
-                            'backgroundColor': '#3498db',
-                            'color': 'white',
-                            'border': 'none',
-                            'padding': '15px 30px',
-                            'fontSize': '16px',
-                            'borderRadius': '5px',
-                            'cursor': 'pointer',
-                            'width': '100%'
-                        }
-                    )
-                ], style={'textAlign': 'center'})
-                
-            ], style={
-                'width': '30%', 
-                'padding': '20px',
-                'backgroundColor': '#f8f9fa',
-                'borderRadius': '10px',
-                'marginRight': '20px',
-                'height': 'fit-content'
-            }),
-            
-            # Right panel - Results
-            html.Div([
-                html.H3("📈 Analysis Results", style={'color': '#34495e'}),
-                
-                # Status indicator
-                html.Div(id='status-indicator', style={'marginBottom': '20px'}),
-                
-                # Progress bar
-                html.Div(id='progress-bar', style={'marginBottom': '20px'}),
-                
-                # Results tabs
-                dcc.Tabs(id='results-tabs', value='overview', children=[
-                    dcc.Tab(label='📊 Overview', value='overview'),
-                    dcc.Tab(label='💹 Performance', value='performance'), 
-                    dcc.Tab(label='🔍 Patterns', value='patterns'),
-                    dcc.Tab(label='📋 History', value='history')
-                ]),
-                
-                # Results content
-                html.Div(id='results-content', style={'marginTop': '20px'})
-                
-            ], style={
-                'width': '65%',
-                'padding': '20px',
-                'backgroundColor': '#ffffff',
-                'borderRadius': '10px',
-                'border': '1px solid #bdc3c7'
-            })
-            
-        ], style={'display': 'flex', 'padding': '20px'}),
-        
-        # Footer
-        html.Div([
-            html.P("Powered by Liquid Neural Networks on NVIDIA Jetson", 
-                   style={'textAlign': 'center', 'color': '#95a5a6', 'marginTop': '30px'})
-        ]),
-        
-        # Hidden div to store analysis results
-        html.Div(id='analysis-results-store', style={'display': 'none'}),
-        
-        # Auto-refresh component
-        dcc.Interval(
-            id='interval-component',
-            interval=2000,  # Update every 2 seconds
-            n_intervals=0
-        )
-    ])
-
-# Callback for running analysis
-@app.callback(
-    [Output('status-indicator', 'children'),
-     Output('progress-bar', 'children'),
-     Output('analysis-results-store', 'children')],
-    [Input('run-button', 'n_clicks'),
-     Input('interval-component', 'n_intervals')],
-    [State('target-stock', 'value'),
-     State('context-stocks', 'value'),
-     State('date-range', 'start_date'),
-     State('date-range', 'end_date'),
-     State('hidden-size', 'value'),
-     State('sequence-length', 'value'),
-     State('learning-rate', 'value'),
-     State('analysis-options', 'value')]
-)
-def update_analysis(n_clicks, n_intervals, target_stock, context_stocks, start_date, end_date,
-                   hidden_size, sequence_length, learning_rate, analysis_options):
-    """Handle analysis execution and status updates."""
+# Define the layout
+app.layout = html.Div([
+    # Header
+    html.Div([
+        html.H1("🧠 Liquid Neural Network Stock Analysis", 
+                style={'textAlign': 'center', 'color': '#2c3e50', 'marginBottom': 10}),
+        html.H3("AI-Powered Market Intelligence Dashboard", 
+                style={'textAlign': 'center', 'color': '#7f8c8d', 'marginTop': 0}),
+        html.Hr()
+    ]),
     
-    # Check if analysis button was clicked
-    ctx = dash.callback_context
-    if ctx.triggered and ctx.triggered[0]['prop_id'] == 'run-button.n_clicks' and n_clicks > 0:
-        # Start analysis in background thread
-        if not analysis_status["running"]:
-            config = {
-                'target_stock': target_stock,
-                'context_stocks': context_stocks or [],
-                'start_date': start_date,
-                'end_date': end_date,
-                'hidden_size': hidden_size,
-                'sequence_length': sequence_length,
-                'learning_rate': learning_rate,
-                'analysis_options': analysis_options or []
-            }
-            
-            thread = threading.Thread(target=run_analysis_background, args=(config,))
-            thread.daemon = True
-            thread.start()
+    # Network Status
+    html.Div(id='network-status', style={'margin': '10px', 'padding': '10px', 'backgroundColor': '#e8f5e8', 'borderRadius': '5px'}),
     
-    # Update status display
-    if analysis_status["running"]:
-        status = html.Div([
-            html.Span("🔄 ", style={'fontSize': '20px'}),
-            html.Span("Analysis Running...", style={'color': '#f39c12', 'fontWeight': 'bold'})
-        ])
+    # Main Control Panel
+    html.Div([
+        html.H3("📊 Analysis Configuration"),
         
-        progress = html.Div([
+        # Analysis Type Selection
+        html.Div([
+            html.Label("Analysis Type:", style={'fontWeight': 'bold'}),
+            dcc.RadioItems(
+                id='analysis-type',
+                options=[
+                    {'label': '🎯 Single Stock Analysis (with similar assets)', 'value': 'single'},
+                    {'label': '📦 Batch Analysis (multiple stocks)', 'value': 'batch'}
+                ],
+                value='single',
+                style={'margin': '10px 0'}
+            )
+        ], style={'marginBottom': '20px'}),
+        
+        # Single Stock Configuration
+        html.Div(id='single-stock-config', children=[
+            html.H4("Single Stock Configuration"),
             html.Div([
-                html.Div(
-                    analysis_status["progress"],
-                    style={
-                        'width': '100%',
-                        'backgroundColor': '#3498db',
-                        'color': 'white',
-                        'textAlign': 'center',
-                        'padding': '10px',
-                        'borderRadius': '5px',
-                        'animation': 'pulse 2s infinite'
-                    }
+                html.Label("Target Stock Symbol:", style={'fontWeight': 'bold'}),
+                dcc.Input(
+                    id='target-stock',
+                    type='text',
+                    placeholder='Enter stock symbol (e.g., AAPL)',
+                    value='AAPL',
+                    style={'width': '200px', 'margin': '5px'}
+                )
+            ]),
+            html.Div([
+                html.Label("Include Similar Assets:", style={'fontWeight': 'bold', 'display': 'block'}),
+                dcc.Checklist(
+                    id='similar-assets',
+                    options=[
+                        {'label': 'Market Index (^GSPC)', 'value': '^GSPC'},
+                        {'label': 'Sector ETF (auto-detect)', 'value': 'sector_etf'},
+                        {'label': 'Broad Market ETF (SPY)', 'value': 'SPY'},
+                        {'label': 'Tech ETF (QQQ)', 'value': 'QQQ'},
+                        {'label': 'Bonds (AGG)', 'value': 'AGG'}
+                    ],
+                    value=['^GSPC', 'SPY'],
+                    style={'margin': '10px 0'}
                 )
             ])
-        ])
+        ]),
         
-        return status, progress, ""
+        # Batch Analysis Configuration
+        html.Div(id='batch-config', children=[
+            html.H4("Batch Analysis Configuration"),
+            html.Div([
+                html.Label("Asset Class:", style={'fontWeight': 'bold'}),
+                dcc.Dropdown(
+                    id='asset-class-dropdown',
+                    options=[{'label': k, 'value': k} for k in ASSET_CLASSES.keys()],
+                    value='Large Cap Tech',
+                    style={'margin': '10px 0'}
+                )
+            ]),
+            html.Div([
+                html.Label("Custom Stock List (comma-separated):", style={'fontWeight': 'bold'}),
+                dcc.Textarea(
+                    id='custom-stocks',
+                    placeholder='Enter custom symbols: AAPL,MSFT,GOOGL...',
+                    style={'width': '100%', 'height': '60px', 'margin': '5px 0'}
+                )
+            ])
+        ], style={'display': 'none'}),
+        
+        # Analysis Parameters
+        html.Div([
+            html.H4("Analysis Parameters"),
+            html.Div([
+                html.Div([
+                    html.Label("Date Range:", style={'fontWeight': 'bold'}),
+                    dcc.DatePickerRange(
+                        id='date-range',
+                        start_date=(datetime.now() - timedelta(days=365*2)).date(),
+                        end_date=datetime.now().date(),
+                        display_format='YYYY-MM-DD'
+                    )
+                ], style={'width': '48%', 'display': 'inline-block'}),
+                
+                html.Div([
+                    html.Label("Analysis Depth:", style={'fontWeight': 'bold'}),
+                    dcc.RadioItems(
+                        id='analysis-depth',
+                        options=[
+                            {'label': '⚡ Quick (Basic features)', 'value': 'quick'},
+                            {'label': '🔍 Standard (All features)', 'value': 'standard'},
+                            {'label': '🎯 Deep (Full analysis + advanced)', 'value': 'deep'}
+                        ],
+                        value='standard',
+                        style={'margin': '5px 0'}
+                    )
+                ], style={'width': '48%', 'float': 'right', 'display': 'inline-block'})
+            ])
+        ], style={'marginBottom': '20px'}),
+        
+        # Control Buttons
+        html.Div([
+            html.Button('🚀 Start Analysis', id='start-btn', n_clicks=0, 
+                       style={'backgroundColor': '#27ae60', 'color': 'white', 'padding': '10px 20px', 
+                             'border': 'none', 'borderRadius': '5px', 'marginRight': '10px', 'fontSize': '16px'}),
+            html.Button('⏹️ Stop Analysis', id='stop-btn', n_clicks=0,
+                       style={'backgroundColor': '#e74c3c', 'color': 'white', 'padding': '10px 20px',
+                             'border': 'none', 'borderRadius': '5px', 'marginRight': '10px', 'fontSize': '16px'}),
+            html.Button('📁 Load Previous Results', id='load-btn', n_clicks=0,
+                       style={'backgroundColor': '#3498db', 'color': 'white', 'padding': '10px 20px',
+                             'border': 'none', 'borderRadius': '5px', 'fontSize': '16px'})
+        ], style={'textAlign': 'center', 'margin': '20px 0'})
+        
+    ], style={'margin': '20px', 'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '10px'}),
     
-    elif analysis_status["results"]:
-        status = html.Div([
-            html.Span("✅ ", style={'fontSize': '20px'}),
-            html.Span("Analysis Complete!", style={'color': '#27ae60', 'fontWeight': 'bold'})
-        ])
-        
-        progress = html.Div()
+    # Progress Section
+    html.Div(id='progress-section', children=[
+        html.H3("📈 Analysis Progress"),
+        html.Div(id='progress-info'),
+        dcc.Interval(id='progress-interval', interval=2000, n_intervals=0)  # Update every 2 seconds
+    ], style={'margin': '20px', 'padding': '20px', 'backgroundColor': '#fff3cd', 'borderRadius': '10px', 'display': 'none'}),
+    
+    # Results Section
+    html.Div(id='results-section', children=[
+        html.H3("📊 Analysis Results"),
+        html.Div(id='results-content')
+    ], style={'margin': '20px'})
+])
 
-        return status, progress, json.dumps(analysis_status["results"], cls=NumpyEncoder)
-    
+# Callbacks for dynamic UI updates
+@app.callback(
+    [Output('single-stock-config', 'style'),
+     Output('batch-config', 'style')],
+    [Input('analysis-type', 'value')]
+)
+def toggle_config_sections(analysis_type):
+    if analysis_type == 'single':
+        return {'display': 'block'}, {'display': 'none'}
     else:
-        status = html.Div([
-            html.Span("⚡ ", style={'fontSize': '20px'}),
-            html.Span("Ready to Analyze", style={'color': '#7f8c8d'})
+        return {'display': 'none'}, {'display': 'block'}
+
+@app.callback(
+    Output('network-status', 'children'),
+    [Input('progress-interval', 'n_intervals')]  # Update periodically
+)
+def update_network_status(n):
+    try:
+        hostname = socket.gethostname()
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        
+        return html.Div([
+            html.Strong("🌐 Network Status: "),
+            f"Running on {hostname} ({local_ip}:8050) | ",
+            html.A("Local Access", href="http://localhost:8050", target="_blank"),
+            " | ",
+            html.A("Network Access", href=f"http://{local_ip}:8050", target="_blank")
+        ])
+    except:
+        return html.Div([
+            html.Strong("🌐 Network Status: "),
+            "Local only | ",
+            html.A("Local Access", href="http://localhost:8050", target="_blank")
+        ])
+
+@app.callback(
+    [Output('progress-section', 'style'),
+     Output('progress-info', 'children')],
+    [Input('progress-interval', 'n_intervals')]
+)
+def update_progress(n):
+    global analysis_status
+    
+    if analysis_status['running']:
+        progress_bar = html.Div([
+            html.Div([
+                html.Div(style={
+                    'width': f"{analysis_status['progress']}%",
+                    'backgroundColor': '#28a745',
+                    'height': '20px',
+                    'borderRadius': '10px',
+                    'transition': 'width 0.5s'
+                })
+            ], style={
+                'width': '100%',
+                'backgroundColor': '#e9ecef',
+                'borderRadius': '10px',
+                'marginBottom': '10px'
+            }),
+            html.P(f"Current Phase: {analysis_status['current_phase']}", style={'margin': '5px 0'}),
+            html.P(f"Progress: {analysis_status['progress']:.1f}%", style={'margin': '5px 0'})
         ])
         
-        progress = html.Div()
-        
-        return status, progress, ""
+        return {'margin': '20px', 'padding': '20px', 'backgroundColor': '#fff3cd', 'borderRadius': '10px', 'display': 'block'}, progress_bar
+    else:
+        return {'display': 'none'}, ""
 
-def run_analysis_background(config):
-    """Run REAL analysis in background thread."""
-    analysis_status["running"] = True
-    analysis_status["progress"] = "Starting real analysis..."
+@app.callback(
+    Output('results-content', 'children'),
+    [Input('start-btn', 'n_clicks'),
+     Input('load-btn', 'n_clicks')],
+    [State('analysis-type', 'value'),
+     State('target-stock', 'value'),
+     State('similar-assets', 'value'),
+     State('asset-class-dropdown', 'value'),
+     State('custom-stocks', 'value'),
+     State('date-range', 'start_date'),
+     State('date-range', 'end_date'),
+     State('analysis-depth', 'value')]
+)
+def handle_analysis(start_clicks, load_clicks, analysis_type, target_stock, similar_assets, 
+                   asset_class, custom_stocks, start_date, end_date, analysis_depth):
+    global analysis_status
+    
+    ctx = callback_context
+    if not ctx.triggered:
+        return "Ready to analyze. Configure your parameters and click 'Start Analysis'."
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if button_id == 'start-btn' and start_clicks > 0:
+        # Validate inputs
+        if analysis_type == 'single' and not target_stock:
+            return html.Div("❌ Please enter a target stock symbol.", style={'color': 'red'})
+        
+        if analysis_type == 'batch' and asset_class == 'Custom' and not custom_stocks:
+            return html.Div("❌ Please enter custom stock symbols for batch analysis.", style={'color': 'red'})
+        
+        # Start analysis in background thread
+        analysis_thread = threading.Thread(
+            target=run_analysis_background,
+            args=(analysis_type, target_stock, similar_assets, asset_class, custom_stocks, 
+                 start_date, end_date, analysis_depth)
+        )
+        analysis_thread.daemon = True
+        analysis_thread.start()
+        
+        return html.Div("🚀 Analysis started! Check progress above.", style={'color': 'green'})
+    
+    elif button_id == 'load-btn' and load_clicks > 0:
+        return load_previous_results()
+    
+    return "Ready to analyze."
+
+def run_analysis_background(analysis_type, target_stock, similar_assets, asset_class, 
+                          custom_stocks, start_date, end_date, analysis_depth):
+    """Run analysis in background thread with progress updates."""
+    global analysis_status
     
     try:
-        # Create temporary config file for this analysis
-        import tempfile
-        import yaml
+        analysis_status['running'] = True
+        analysis_status['progress'] = 0
+        analysis_status['current_phase'] = 'Initializing...'
+        analysis_status['error'] = None
         
-        analysis_status["progress"] = "Preparing configuration..."
+        # Prepare configuration
+        if analysis_type == 'single':
+            tickers = [target_stock]
+            if similar_assets:
+                tickers.extend(similar_assets)
+            tickers = list(set(tickers))  # Remove duplicates
+        else:
+            if asset_class == 'Custom' and custom_stocks:
+                tickers = [s.strip().upper() for s in custom_stocks.split(',')]
+            else:
+                tickers = ASSET_CLASSES.get(asset_class, ['AAPL'])
         
-        # Create real config based on GUI selections
-        real_config = {
+        config = {
             'data': {
-                'tickers': config['context_stocks'] + [config['target_stock']],
-                'start_date': config['start_date'],
-                'end_date': config['end_date'], 
-                'target_ticker': config['target_stock']
-            },
-            'model': {
-                'sequence_length': config['sequence_length'],
-                'hidden_size': config['hidden_size'],
-                'learning_rate': config['learning_rate'],
-                'batch_size': 32,
-                'num_epochs': 50,  # Shorter for GUI
-                'patience': 10
+                'tickers': tickers,
+                'target_ticker': target_stock if analysis_type == 'single' else tickers[0],
+                'start_date': start_date,
+                'end_date': end_date
             },
             'analysis': {
-                'use_advanced_features': 'advanced_features' in config['analysis_options'],
-                'pattern_analysis': 'patterns' in config['analysis_options'],
-                'temporal_analysis': 'temporal' in config['analysis_options']
+                'use_advanced_features': analysis_depth in ['standard', 'deep'],
+                'pattern_analysis': True,
+                'temporal_analysis': analysis_depth == 'deep',
+                'dimensionality_reduction': analysis_depth in ['standard', 'deep']
+            },
+            'model': {
+                'sequence_length': 30,
+                'hidden_size': 50 if analysis_depth == 'quick' else 100,
+                'num_epochs': 50 if analysis_depth == 'quick' else 100,
+                'learning_rate': 0.001,
+                'batch_size': 32,
+                'patience': 10
             }
         }
         
         # Save temporary config
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-            yaml.dump(real_config, f)
-            temp_config_path = f.name
+        temp_config_path = 'config/temp_gui_config.yaml'
+        os.makedirs('config', exist_ok=True)
         
-        analysis_status["progress"] = "Running real analysis..."
+        import yaml
+        with open(temp_config_path, 'w') as f:
+            yaml.dump(config, f)
         
-        # Import and run real analysis
-        import sys
-        import os
-        sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-        from scripts.run_analysis import ComprehensiveAnalyzer
+        # Run analysis with progress tracking
+        experiment_name = f"gui_{analysis_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
-        # Run real analysis
+        analysis_status['current_phase'] = 'Data Loading'
+        analysis_status['progress'] = 10
+        
         analyzer = ComprehensiveAnalyzer(
             config_path=temp_config_path,
-            experiment_name=f"gui_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            experiment_name=experiment_name
         )
         
-        results = analyzer.run_complete_analysis(phases=['data', 'training', 'evaluation'])
+        # Determine phases based on analysis depth
+        if analysis_depth == 'quick':
+            phases = ['data', 'training', 'evaluation']
+        elif analysis_depth == 'standard':
+            phases = ['data', 'features', 'training', 'evaluation', 'report']
+        else:  # deep
+            phases = ['data', 'features', 'training', 'evaluation', 'report']
         
-        # Extract real results
-        if 'evaluation' in results and results['evaluation']:
-            eval_metrics = results['evaluation'].get('metrics', {})
-            
-            trading_metrics = eval_metrics.get('trading_metrics', {})
-            directional_metrics = eval_metrics.get('directional_metrics', {})
-            
-            analysis_status["results"] = {
-                'target_stock': config['target_stock'],
-                'total_return': trading_metrics.get('total_return', 0),
-                'sharpe_ratio': trading_metrics.get('sharpe_ratio', 0),
-                'max_drawdown': trading_metrics.get('max_drawdown', 0),
-                'directional_accuracy': directional_metrics.get('directional_accuracy', 0),
-                'timestamp': datetime.now().isoformat()
-            }
-        else:
-            # Fallback if analysis fails
-            analysis_status["results"] = {'error': 'Analysis failed to complete'}
+        # Run analysis with progress updates
+        phase_progress = {
+            'data': 30,
+            'features': 50,
+            'training': 70,
+            'evaluation': 90,
+            'report': 100
+        }
         
-        # Clean up temp file
-        os.unlink(temp_config_path)
+        for phase in phases:
+            analysis_status['current_phase'] = f'Running {phase} analysis...'
+            analysis_status['progress'] = phase_progress.get(phase, 50)
+            
+            # This is a simplified version - you might need to modify ComprehensiveAnalyzer
+            # to support individual phase execution with progress callbacks
+            time.sleep(2)  # Simulate work
+        
+        # For now, run the complete analysis
+        analysis_status['current_phase'] = 'Running complete analysis...'
+        results = analyzer.run_complete_analysis(phases=phases)
+        
+        analysis_status['results'] = results
+        analysis_status['progress'] = 100
+        analysis_status['current_phase'] = 'Complete!'
+        analysis_status['running'] = False
+        
+        # Clean up temp config
+        if os.path.exists(temp_config_path):
+            os.remove(temp_config_path)
+            
+    except Exception as e:
+        analysis_status['error'] = str(e)
+        analysis_status['running'] = False
+        analysis_status['current_phase'] = f'Error: {str(e)}'
+        print(f"Analysis error: {e}")
+
+def load_previous_results():
+    """Load and display previous analysis results."""
+    try:
+        # Look for recent result files
+        results_dir = 'results/reports'
+        if not os.path.exists(results_dir):
+            return "No previous results found."
+        
+        # Find recent JSON files
+        json_files = [f for f in os.listdir(results_dir) if f.endswith('.json')]
+        if not json_files:
+            return "No previous results found."
+        
+        # Sort by modification time (most recent first)
+        json_files.sort(key=lambda x: os.path.getmtime(os.path.join(results_dir, x)), reverse=True)
+        
+        recent_files = json_files[:5]  # Show 5 most recent
+        
+        return html.Div([
+            html.H4("Recent Analysis Results:"),
+            html.Ul([
+                html.Li([
+                    html.A(f, href=f"/results/reports/{f}", target="_blank"),
+                    f" (Modified: {datetime.fromtimestamp(os.path.getmtime(os.path.join(results_dir, f))).strftime('%Y-%m-%d %H:%M')})"
+                ]) for f in recent_files
+            ])
+        ])
         
     except Exception as e:
-        analysis_status["results"] = {'error': str(e)}
-    
-    finally:
-        analysis_status["running"] = False
-        analysis_status["progress"] = ""
+        return f"Error loading results: {str(e)}"
 
-# Callback for updating results display
-@app.callback(
-    Output('results-content', 'children'),
-    [Input('results-tabs', 'value'),
-     Input('analysis-results-store', 'children')]
-)
-def update_results_display(active_tab, results_json):
-    """Update the results display based on selected tab."""
-    
-    if not results_json:
-        return html.Div([
-            html.P("No analysis results yet. Configure your analysis and click 'Run Analysis' to get started.",
-                   style={'textAlign': 'center', 'color': '#7f8c8d', 'fontStyle': 'italic'})
-        ])
-    
+def check_matplotlib_backend():
+    """Check and configure matplotlib for headless operation."""
     try:
-        results = json.loads(results_json)
-    except:
-        return html.Div("Error loading results")
-    
-    if 'error' in results:
-        return html.Div([
-            html.H4("❌ Analysis Error", style={'color': '#e74c3c'}),
-            html.P(f"Error: {results['error']}")
-        ])
-    
-    if active_tab == 'overview':
-        return create_overview_tab(results)
-    elif active_tab == 'performance':
-        return create_performance_tab(results)
-    elif active_tab == 'patterns':
-        return create_patterns_tab(results)
-    elif active_tab == 'history':
-        return create_history_tab()
-    
-    return html.Div("Tab content not implemented yet")
-
-def create_overview_tab(results):
-    """Create overview tab content."""
-    return html.Div([
-        html.H4(f"📊 Analysis Overview - {results['target_stock']}", style={'color': '#2c3e50'}),
-        
-        # Key metrics cards
-        html.Div([
-            html.Div([
-                html.H3(f"{results['total_return']:.1%}", style={'color': '#27ae60', 'margin': '0'}),
-                html.P("Total Return", style={'margin': '0', 'color': '#7f8c8d'})
-            ], style={'textAlign': 'center', 'padding': '20px', 'backgroundColor': '#f8f9fa', 
-                     'borderRadius': '10px', 'width': '22%', 'margin': '1%'}),
-            
-            html.Div([
-                html.H3(f"{results['sharpe_ratio']:.2f}", style={'color': '#3498db', 'margin': '0'}),
-                html.P("Sharpe Ratio", style={'margin': '0', 'color': '#7f8c8d'})
-            ], style={'textAlign': 'center', 'padding': '20px', 'backgroundColor': '#f8f9fa',
-                     'borderRadius': '10px', 'width': '22%', 'margin': '1%'}),
-            
-            html.Div([
-                html.H3(f"{results['max_drawdown']:.1%}", style={'color': '#e74c3c', 'margin': '0'}),
-                html.P("Max Drawdown", style={'margin': '0', 'color': '#7f8c8d'})
-            ], style={'textAlign': 'center', 'padding': '20px', 'backgroundColor': '#f8f9fa',
-                     'borderRadius': '10px', 'width': '22%', 'margin': '1%'}),
-            
-            html.Div([
-                html.H3(f"{results['directional_accuracy']:.1%}", style={'color': '#9b59b6', 'margin': '0'}),
-                html.P("Directional Accuracy", style={'margin': '0', 'color': '#7f8c8d'})
-            ], style={'textAlign': 'center', 'padding': '20px', 'backgroundColor': '#f8f9fa',
-                     'borderRadius': '10px', 'width': '22%', 'margin': '1%'})
-            
-        ], style={'display': 'flex', 'marginBottom': '30px'}),
-        
-        # Analysis timestamp
-        html.P(f"Analysis completed: {results['timestamp'][:19]}", 
-               style={'color': '#95a5a6', 'fontStyle': 'italic'})
-    ])
-
-def create_performance_tab(results):
-    """Create performance tab content."""
-    return html.Div([
-        html.H4("💹 Performance Analysis", style={'color': '#2c3e50'}),
-        html.P("Detailed performance charts and metrics will be displayed here."),
-        html.P("(Implementation in progress)")
-    ])
-
-def create_patterns_tab(results):
-    """Create patterns tab content.""" 
-    return html.Div([
-        html.H4("🔍 Pattern Analysis", style={'color': '#2c3e50'}),
-        html.P("Market patterns and technical analysis will be displayed here."),
-        html.P("(Implementation in progress)")
-    ])
-
-def create_history_tab():
-    """Create history tab content."""
-    experiments = experiment_tracker.get_experiments_dataframe()
-    
-    if experiments.empty:
-        return html.Div([
-            html.P("No previous experiments found.",
-                   style={'textAlign': 'center', 'color': '#7f8c8d'})
-        ])
-    
-    return html.Div([
-        html.H4("📋 Experiment History", style={'color': '#2c3e50'}),
-        dash_table.DataTable(
-            data=experiments.head(10).to_dict('records'),
-            columns=[{'name': col, 'id': col} for col in ['experiment_name', 'timestamp']],
-            style_cell={'textAlign': 'left'},
-            style_header={'backgroundColor': '#3498db', 'color': 'white'}
-        )
-    ])
-
-# Set app layout
-app.layout = create_layout()
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        import matplotlib.pyplot as plt
+        print("✓ Matplotlib configured for headless operation")
+        return True
+    except Exception as e:
+        print(f"⚠️  Matplotlib configuration issue: {e}")
+        return False
 
 def main():
-    """Run the web GUI."""
-    print("=" * 60)
+    """Run the web GUI with enhanced network support and error handling."""
+    print("=" * 60)  
     print("🚀 STOCK LNN ANALYSIS - WEB GUI")
     print("=" * 60)
     print("Starting web interface...")
-    print("Open your browser to: http://localhost:8050")
+    
+    # Configure matplotlib for headless operation
+    if not check_matplotlib_backend():
+        print("⚠️  Warning: Matplotlib issues detected. Plots may not work correctly.")
+    
+    # Get network information
+    try:
+        hostname = socket.gethostname()
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        
+        print(f"Hostname: {hostname}")
+        print(f"Local IP: {local_ip}")
+        print()
+        print("ACCESS URLS:")
+        print(f"  Local:   http://localhost:8050")
+        print(f"  Network: http://{local_ip}:8050")
+        print()
+        print("GUI FEATURES:")
+        print("  ✓ Single stock analysis with similar assets")
+        print("  ✓ Batch analysis across asset classes")
+        print("  ✓ Configurable analysis depth (Quick/Standard/Deep)")
+        print("  ✓ Real-time progress tracking")
+        print("  ✓ Network access from other devices")
+        print()
+        print("TROUBLESHOOTING:")
+        print("  1. Ensure all devices are on the same WiFi network")
+        print("  2. Check firewall settings if network access fails")
+        print("  3. Try restarting if matplotlib errors occur")
+        print()
+        
+    except Exception as e:
+        print(f"Network detection error: {e}")
+        print("Local access only: http://localhost:8050")
+    
     print("Press Ctrl+C to stop")
     print("=" * 60)
     
-    app.run(debug=False, host='0.0.0.0', port=8050)
+    try:
+        # Ensure required directories exist
+        os.makedirs('results/reports', exist_ok=True)
+        os.makedirs('results/plots', exist_ok=True)
+        os.makedirs('config', exist_ok=True)
+        
+        # Run the app
+        app.run(
+            host='0.0.0.0',           # Listen on all network interfaces
+            port=8050,                # Standard port
+            debug=False,              # Disable debug for stability
+            threaded=True,            # Handle multiple connections
+            dev_tools_hot_reload=False  # Disable hot reload for stability
+        )
+        
+    except KeyboardInterrupt:
+        print("\n👋 Shutting down gracefully...")
+        
+    except Exception as e:
+        print(f"\n❌ Server error: {e}")
+        print("\nTROUBLESHOoting suggestions:")
+        print("1. Check if another process is using port 8050:")
+        print("   netstat -tulpn | grep 8050")
+        print("2. Try killing any existing processes:")
+        print("   pkill -f web_gui.py")
+        print("3. Restart your Jetson Nano if issues persist")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

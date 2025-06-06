@@ -23,6 +23,7 @@ import pandas as pd
 import json
 from datetime import datetime
 import warnings
+import torch
 warnings.filterwarnings('ignore')
 
 class NumpyEncoder(json.JSONEncoder):
@@ -41,21 +42,43 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.item()
         return super (NumpyEncoder, self).default(obj)
 
-# Add src to Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+# FIXED: Smart path detection for imports
+def setup_import_paths():
+    """Setup import paths to work from both scripts/ and project root."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)  # Go up one level from scripts/
+    src_path = os.path.join(project_root, 'src')
+    
+    # Add src to Python path if it exists and isn't already there
+    if os.path.exists(src_path) and src_path not in sys.path:
+        sys.path.insert(0, src_path)
+        print(f"Added to Python path: {src_path}")
+    
+    # Also add the scripts directory for when run from elsewhere
+    scripts_path = current_dir
+    if scripts_path not in sys.path:
+        sys.path.insert(0, scripts_path)
+    
+    return src_path
+
+# Setup paths before any src imports
+setup_import_paths()
+
+# Now the original src imports should work
 from data.data_loader import StockDataLoader
 from data.preprocessor import StockDataPreprocessor
 from analysis.pattern_recognition import PatternRecognizer
 from analysis.feature_engineering import AdvancedFeatureEngineer
 from analysis.dimensionality_reduction import DimensionalityReducer
 from analysis.temporal_analysis import TemporalAnalyzer
+from analysis.market_abstraction_pipeline import EnhancedFeatureEngineer
 from utils.experiment_tracker import ExperimentTracker
 from utils.metrics import StockPredictionMetrics
+from utils.file_naming import file_namer, create_model_paths
 
 # Import training and evaluation scripts as modules
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
-from train_model import LNNTrainer
-from evaluate_model import ModelEvaluator
+from integrated_enhanced_trainer import LNNTrainer  # Uses enhanced pipeline
+from evaluate_model import ModelEvaluator, create_enhanced_evaluator
 
 class ComprehensiveAnalyzer:
     """
@@ -85,6 +108,7 @@ class ComprehensiveAnalyzer:
         # Analysis components
         self.pattern_recognizer = PatternRecognizer()
         self.feature_engineer = AdvancedFeatureEngineer()
+        self.enhanced_engineer = EnhancedFeatureEngineer(use_abstractions=True)
         self.dim_reducer = DimensionalityReducer()
         self.temporal_analyzer = TemporalAnalyzer()
         
@@ -92,6 +116,19 @@ class ComprehensiveAnalyzer:
         self.analysis_results = {}
         self.model_path = None
         self.evaluation_results = None
+        
+        # NEW: Create standardized file paths
+        data_config = self.config.get('data', {})
+        model_config = self.config.get('model', {})
+        target_ticker = data_config.get('target_ticker', 'UNKNOWN')
+        hidden_size = model_config.get('hidden_size', 50)
+        sequence_length = model_config.get('sequence_length', 30)
+    
+        self.file_paths = create_model_paths(target_ticker, hidden_size, sequence_length, experiment_name)
+    
+        print(f"Standardized paths created:")
+        print(f"  Model: {self.file_paths['model_path']}")
+        print(f"  Analysis: {self.file_paths['analysis_json']}")
         
         # Experiment tracking
         self.experiment_tracker = ExperimentTracker()
@@ -144,7 +181,7 @@ class ComprehensiveAnalyzer:
         print("=" * 70)
         print("PHASE 1: RAW DATA ANALYSIS")
         print("=" * 70)
-        
+    
         # 1. Load raw market data
         print("Loading market data...")
         self.data_loader = StockDataLoader(
@@ -152,48 +189,118 @@ class ComprehensiveAnalyzer:
             start_date=self.config['data']['start_date'],
             end_date=self.config['data']['end_date']
         )
-        
+    
         self.raw_data = self.data_loader.download_data()
         price_data = self.data_loader.get_closing_prices()
-        
-        print(f"✓ Loaded {len(price_data)} assets")
+    
+        # Validate data
+        if not price_data:
+            print("ERROR: No price data loaded!")
+            raise ValueError("Failed to load any price data. Check your internet connection and ticker symbols.")
+    
+        # Check for empty data
+        valid_tickers = []
+        for ticker, prices in price_data.items():
+            if prices is None or (hasattr(prices, 'size') and prices.size == 0):
+                print(f"⚠️  WARNING: No data for {ticker}")
+            else:
+                valid_tickers.append(ticker)
+    
+        if not valid_tickers:
+            print("ERROR: All tickers have empty data!")
+            raise ValueError("No valid price data found for any ticker.")
+    
+        print(f"✓ Loaded {len(valid_tickers)} assets with valid data")
         print(f"✓ Date range: {self.config['data']['start_date']} to {self.config['data']['end_date']}")
-        print(f"✓ Total observations per asset: {len(next(iter(price_data.values())))}")
-        
+    
+        # Get length of first valid ticker's data
+        first_valid_ticker = valid_tickers[0]
+        first_valid_data = price_data[first_valid_ticker]
+        data_length = len(first_valid_data) if hasattr(first_valid_data, '__len__') else first_valid_data.size
+        print(f"✓ Total observations per asset: {data_length}")
+    
         # 2. Basic data statistics
         print("\nCalculating basic statistics...")
         data_stats = {}
+    
         for ticker, prices in price_data.items():
-            prices_flat = prices.flatten()
-            returns = (prices_flat[1:] - prices_flat[:-1]) / prices_flat[:-1]
+            # Skip empty data
+            if prices is None or (hasattr(prices, 'size') and prices.size == 0):
+                print(f"   Skipping {ticker} - no data")
+                continue
             
-            data_stats[ticker] = {
-                'price_mean': float(prices_flat.mean()),
-                'price_std': float(prices_flat.std()),
-                'price_min': float(prices_flat.min()),
-                'price_max': float(prices_flat.max()),
-                'return_mean': float(returns.mean()),
-                'return_std': float(returns.std()),
-                'total_return': float((prices_flat[-1] - prices_flat[0]) / prices_flat[0]),
-                'sharpe_estimate': float(returns.mean() / returns.std() * (252**0.5)) if returns.std() > 0 else 0
-            }
-        
+            try:
+                # Ensure prices is a 1D array
+                if hasattr(prices, 'ndim') and prices.ndim > 1:
+                    prices_flat = prices.flatten()
+                else:
+                    prices_flat = np.array(prices).flatten()
+            
+                # Check if we have enough data
+                if len(prices_flat) < 2:
+                    print(f"   Skipping {ticker} - insufficient data points")
+                    continue
+            
+                # Calculate returns
+                returns = (prices_flat[1:] - prices_flat[:-1]) / prices_flat[:-1]
+            
+                # Remove any NaN or infinite values
+                returns_clean = returns[np.isfinite(returns)]
+            
+                if len(returns_clean) == 0:
+                    print(f"   Skipping {ticker} - no valid returns")
+                    continue
+            
+                data_stats[ticker] = {
+                    'price_mean': float(np.mean(prices_flat)),
+                    'price_std': float(np.std(prices_flat)),
+                    'price_min': float(np.min(prices_flat)),
+                    'price_max': float(np.max(prices_flat)),
+                    'return_mean': float(np.mean(returns_clean)),
+                    'return_std': float(np.std(returns_clean)),
+                    'total_return': float((prices_flat[-1] - prices_flat[0]) / prices_flat[0]),
+                    'sharpe_estimate': float(np.mean(returns_clean) / np.std(returns_clean) * np.sqrt(252)) if np.std(returns_clean) > 0 else 0
+                }
+            
+            except Exception as e:
+                print(f"   Error processing {ticker}: {e}")
+                continue
+    
+        if not data_stats:
+            print("ERROR: Could not calculate statistics for any ticker!")
+            raise ValueError("Failed to process any ticker data.")
+    
         self.analysis_results['data_statistics'] = data_stats
-        
+    
         # Print summary
         print("\nBASIC DATA SUMMARY:")
         print("-" * 40)
         for ticker, stats in data_stats.items():
             print(f"{ticker}: Total Return={stats['total_return']:.1%}, "
-                  f"Volatility={stats['return_std']*100:.1f}%, "
-                  f"Sharpe≈{stats['sharpe_estimate']:.2f}")
-        
+                f"Volatility={stats['return_std']*100:.1f}%, "
+                f"Sharpe≈{stats['sharpe_estimate']:.2f}")
+    
         # 3. Pattern Recognition Analysis
         if self.config.get('analysis', {}).get('pattern_analysis', True):
             print("\nRunning pattern recognition analysis...")
             target_ticker = self.config['data']['target_ticker']
-            target_prices = price_data[target_ticker]
-            
+        
+        # Check if target ticker has valid data
+        if target_ticker not in data_stats:
+            print(f"⚠️  WARNING: Target ticker {target_ticker} has no valid data")
+            # Try to use first valid ticker instead
+            if valid_tickers:
+                target_ticker = valid_tickers[0]
+                print(f"   Using {target_ticker} as alternative target")
+                self.config['data']['target_ticker'] = target_ticker
+            else:
+                print("   Skipping pattern analysis - no valid data")
+                self.analysis_results['patterns'] = {'error': 'No valid target data'}
+                return
+        
+        target_prices = price_data[target_ticker]
+        
+        try:
             pattern_results = self.pattern_recognizer.get_pattern_summary(target_prices)
             self.analysis_results['patterns'] = pattern_results
             
@@ -207,43 +314,56 @@ class ComprehensiveAnalyzer:
             trend_info = pattern_results.get('trend', {})
             print(f"Overall Trend: {trend_info.get('direction', 'unknown').title()} "
                   f"(strength: {trend_info.get('strength', 0):.3f})")
-        
+        except Exception as e:
+            print(f"   Error in pattern recognition: {e}")
+            self.analysis_results['patterns'] = {'error': str(e)}
+    
         # 4. Temporal Analysis
         if self.config.get('analysis', {}).get('temporal_analysis', True):
             print("\nRunning temporal analysis...")
-            target_prices = price_data[self.config['data']['target_ticker']]
-            
-            temporal_results = self.temporal_analyzer.get_comprehensive_analysis(target_prices)
-            self.analysis_results['temporal'] = temporal_results
-            
-            # Print temporal summary
-            print(f"\nTEMPORAL ANALYSIS:")
-            print("-" * 40)
-            
-            # Seasonality
-            seasonality = temporal_results.get('seasonality', {})
-            if seasonality.get('is_seasonal', False):
-                period = seasonality.get('dominant_period', 'unknown')
-                print(f"Seasonality detected with period: {period} days")
-            else:
-                print("No significant seasonality detected")
-            
-            # Regime changes
-            regime_info = temporal_results.get('regime_changes', {})
-            if regime_info:
-                n_regimes = regime_info.get('n_regimes', 0)
-                change_points = regime_info.get('change_points', [])
-                print(f"Detected {n_regimes} market regimes with {len(change_points)} transitions")
-            
-            # Autocorrelation
-            autocorr_info = temporal_results.get('autocorrelation', {})
-            if autocorr_info:
-                significant_lags = autocorr_info.get('significant_lags', [])
-                if significant_lags:
-                    print(f"Significant autocorrelations at lags: {significant_lags[:5]}")
-                else:
-                    print("No significant autocorrelations detected")
+            target_ticker = self.config['data']['target_ticker']
         
+            if target_ticker in price_data and price_data[target_ticker] is not None:
+                target_prices = price_data[target_ticker]
+            
+                try:
+                    temporal_results = self.temporal_analyzer.get_comprehensive_analysis(target_prices)
+                    self.analysis_results['temporal'] = temporal_results
+                
+                    # Print temporal summary
+                    print(f"\nTEMPORAL ANALYSIS:")
+                    print("-" * 40)
+                
+                    # Seasonality
+                    seasonality = temporal_results.get('seasonality', {})
+                    if seasonality.get('is_seasonal', False):
+                        period = seasonality.get('dominant_period', 'unknown')
+                        print(f"Seasonality detected with period: {period} days")
+                    else:
+                        print("No significant seasonality detected")
+                
+                    # Regime changes
+                    regime_info = temporal_results.get('regime_changes', {})
+                    if regime_info:
+                        n_regimes = regime_info.get('n_regimes', 0)
+                        change_points = regime_info.get('change_points', [])
+                        print(f"Detected {n_regimes} market regimes with {len(change_points)} transitions")
+                
+                    # Autocorrelation
+                    autocorr_info = temporal_results.get('autocorrelation', {})
+                    if autocorr_info:
+                        significant_lags = autocorr_info.get('significant_lags', [])
+                        if significant_lags:
+                            print(f"Significant autocorrelations at lags: {significant_lags[:5]}")
+                        else:
+                            print("No significant autocorrelations detected")
+                except Exception as e:
+                    print(f"   Error in temporal analysis: {e}")
+                    self.analysis_results['temporal'] = {'error': str(e)}
+            else:
+                print("   Skipping temporal analysis - no valid target data")
+                self.analysis_results['temporal'] = {'error': 'No valid target data'}
+    
         print(f"\n✓ Raw data analysis completed")
     
     def analyze_features(self):
@@ -278,6 +398,11 @@ class ComprehensiveAnalyzer:
         # Generate features
         features, feature_names = self.feature_engineer.create_comprehensive_features(
             ohlcv_data, include_advanced=True
+        )
+        features, feature_names = self.enhanced_engineer.create_features_with_abstractions(
+            price_data=price_data,        # Your existing price_data 
+            target_ticker=target_ticker,  # Your target ticker
+            ohlcv_data=ohlcv_data        # Your existing OHLCV approximation
         )
         
         print(f"✓ Created {len(feature_names)} features")
@@ -341,26 +466,45 @@ class ComprehensiveAnalyzer:
     
     def train_model(self):
         """
-        Train the Liquid Neural Network model.
+        Train the Liquid Neural Network model using enhanced pipeline.
         """
         print("=" * 70)
-        print("PHASE 3: MODEL TRAINING")
+        print("PHASE 3: MODEL TRAINING (ENHANCED)")
         print("=" * 70)
-        
-        # Initialize trainer
+
+        # Check if enhanced features are enabled
+        use_enhanced = self.config.get('analysis', {}).get('use_advanced_features', False)
+        use_abstractions = self.config.get('analysis', {}).get('use_abstractions', False)
+
+        if use_enhanced or use_abstractions:
+            print("🧠 Using Enhanced Feature Pipeline")
+            print("   ✅ Advanced features enabled")
+            print("   ✅ Market abstractions enabled" if use_abstractions else "   ⚪ Market abstractions disabled")
+        else:
+            print("📊 Using Basic Feature Pipeline")
+
+        # Initialize enhanced trainer  
         trainer = LNNTrainer(config_path=self.config_path)
-        
-        # Run training pipeline
-        print("Starting model training pipeline...")
-        trainer.prepare_data()
-        self.model_path = trainer.train_model(experiment_name=self.experiment_name)
-        
+
+        # CORRECTED: Use standardized model path 
+        # Set the trainer to save to our standardized location
+        original_model_path = trainer.train_model(experiment_name=self.experiment_name)
+    
+        # Copy to standardized location if different
+        if original_model_path != self.file_paths['model_path']:
+            import shutil
+            shutil.copy2(original_model_path, self.file_paths['model_path'])
+            print(f"Model copied to standardized location: {self.file_paths['model_path']}")
+    
+        # Use standardized path
+        self.model_path = self.file_paths['model_path']
+
         # Store training results
-        training_summary = trainer.metric_tracker.get_training_summary()
+        training_summary = trainer.get_training_summary()
         self.analysis_results['training'] = training_summary
-        
-        print(f"✓ Model training completed")
-        print(f"✓ Model saved to: {self.model_path}")
+
+        print(f"✅ Model training completed")
+        print(f"✅ Model saved to: {self.model_path}")
     
     def evaluate_model(self):
         """
@@ -388,6 +532,208 @@ class ComprehensiveAnalyzer:
         self.analysis_results['evaluation'] = self.evaluation_results
         
         print(f"✓ Model evaluation completed")
+
+    def evaluate_model_enhanced(self):
+        """
+        Enhanced model evaluation using sophisticated trading strategy.
+        This is an ADDITIONAL method, don't replace your existing evaluate_model method.
+        """
+        print("=" * 70)
+        print("PHASE 4: ENHANCED MODEL EVALUATION WITH SOPHISTICATED TRADING")
+        print("=" * 70)
+        
+        if not self.model_path:
+            print("ERROR: No trained model available for evaluation")
+            return
+        
+        # Use the enhanced evaluator factory function
+        try:
+            enhanced_evaluator = create_enhanced_evaluator(self.model_path)
+            print("✓ Enhanced evaluator created successfully")
+        except Exception as e:
+            print(f"ERROR creating enhanced evaluator: {e}")
+            print("Falling back to basic evaluation...")
+            # Fall back to your existing evaluation
+            return self.evaluate_model()
+        
+        # Run enhanced evaluation
+        print("Starting enhanced model evaluation pipeline...")
+        
+        try:
+            # For now, we'll run a simplified version that integrates with your existing data
+            self.evaluation_results = self._run_simplified_enhanced_evaluation(enhanced_evaluator)
+            
+            # Store evaluation results
+            self.analysis_results['enhanced_evaluation'] = self.evaluation_results
+            
+            print(f"✓ Enhanced model evaluation completed")
+            
+        except Exception as e:
+            print(f"ERROR during enhanced evaluation: {e}")
+            print("Falling back to basic evaluation...")
+            return self.evaluate_model()
+    
+    def validate_enhanced_integration(self):
+        """Validate that enhanced features are working properly."""
+    
+        print("\n🔍 VALIDATING ENHANCED INTEGRATION")
+        print("=" * 50)
+    
+        # Check configuration
+        use_enhanced = self.config.get('analysis', {}).get('use_advanced_features', False)
+        use_abstractions = self.config.get('analysis', {}).get('use_abstractions', False)
+    
+        print(f"Configuration check:")
+        print(f"  use_advanced_features: {use_enhanced}")
+        print(f"  use_abstractions: {use_abstractions}")
+    
+        # Check training results
+        if 'training' in self.analysis_results:
+            training = self.analysis_results['training']
+            feature_count = training.get('feature_count', 0)
+        
+            print(f"Training results:")
+            print(f"  Feature count: {feature_count}")
+            print(f"  Model path: {training.get('model_path', 'Not found')}")
+        
+            # Validation checks
+            if use_enhanced and feature_count < 50:
+                print("❌ WARNING: Enhanced features enabled but low feature count")
+                return False
+            elif not use_enhanced and feature_count > 50:
+                print("❌ WARNING: Enhanced features disabled but high feature count")
+                return False
+            else:
+                print("✅ Feature configuration matches training results")
+                return True
+    
+        return False
+    
+    def _run_simplified_enhanced_evaluation(self, enhanced_evaluator):
+        """
+        Simplified version of enhanced evaluation that works with your existing pipeline.
+        """
+        print("Running simplified enhanced evaluation...")
+        
+        # Get your existing data
+        price_data = self.data_loader.get_closing_prices()
+        target_ticker = self.config['data']['target_ticker']
+        target_prices = price_data[target_ticker]
+        
+        # Create some mock predictions for testing
+        # In a real implementation, you'd load your trained model and make actual predictions
+        print("⚠️ Using mock predictions for testing - replace with actual model predictions")
+        
+        # Generate mock predictions (replace this with actual model predictions)
+        n_predictions = min(100, len(target_prices) - 50)  # Last 100 days or available data
+        mock_predictions = np.random.randn(n_predictions) * 0.02  # Random predictions ±2%
+        actual_prices = target_prices[-n_predictions:]
+        
+        print(f"Testing enhanced strategy with {n_predictions} prediction points...")
+        
+        # Run enhanced trading evaluation
+        if hasattr(enhanced_evaluator, 'evaluate_trading_performance_enhanced'):
+            enhanced_results = enhanced_evaluator.evaluate_trading_performance_enhanced(
+                predictions=mock_predictions,
+                actual_prices=actual_prices
+            )
+        else:
+            # Fall back to basic evaluation
+            enhanced_results = enhanced_evaluator.evaluate_trading_performance_basic(
+                predictions=mock_predictions,
+                actual_prices=actual_prices
+            )
+        
+        # Print results
+        self._print_enhanced_results(enhanced_results)
+        
+        return enhanced_results
+    
+    def _print_enhanced_results(self, results):
+        """Print the enhanced evaluation results."""
+        
+        print("\n" + "=" * 60)
+        print("ENHANCED TRADING STRATEGY RESULTS")
+        print("=" * 60)
+        
+        if 'total_return' in results:
+            print(f"\n📈 RETURN METRICS:")
+            print("-" * 30)
+            print(f"Strategy Return:     {results['total_return']:.1%}")
+            print(f"Buy & Hold Return:   {results['buy_hold_return']:.1%}")
+            print(f"Excess Return:       {results['excess_return']:.1%}")
+            
+            if 'sharpe_ratio' in results:
+                print(f"\n⚖️ RISK METRICS:")
+                print("-" * 30)
+                print(f"Sharpe Ratio:        {results['sharpe_ratio']:.2f}")
+                if 'max_drawdown' in results:
+                    print(f"Max Drawdown:        {results['max_drawdown']:.1%}")
+            
+            if 'total_trades' in results:
+                print(f"\n🎯 TRADING METRICS:")
+                print("-" * 30)
+                print(f"Total Trades:        {results['total_trades']}")
+                if 'avg_confidence' in results:
+                    print(f"Avg Confidence:      {results['avg_confidence']:.2f}")
+            
+            print(f"\n💰 PORTFOLIO METRICS:")
+            print("-" * 30)
+            print(f"Final Portfolio Value: ${results['final_portfolio_value']:,.2f}")
+            
+            # Performance summary
+            print(f"\n🏆 PERFORMANCE SUMMARY:")
+            print("-" * 30)
+            
+            if results['excess_return'] > 0:
+                print(f"✅ Strategy OUTPERFORMED buy-and-hold by {results['excess_return']:.1%}")
+            else:
+                print(f"❌ Strategy UNDERPERFORMED buy-and-hold by {abs(results['excess_return']):.1%}")
+        
+        else:
+            print("⚠️ Enhanced results format not recognized")
+            print("Available keys:", list(results.keys()))
+    
+    # MODIFY your existing run_complete_analysis method
+    # Find this part and ADD the enhanced evaluation option:
+    
+    def run_complete_analysis(self, phases: list = None):
+        """
+        Run the complete analysis pipeline.
+        MODIFIED to include enhanced evaluation option.
+        """
+        start_time = time.time()
+        
+        if phases is None:
+            phases = ['data', 'features', 'training', 'evaluation', 'report']
+        
+        # Phase 3: Model Training
+        if 'training' in phases:
+            phase_start = time.time()
+            self.train_model()
+    
+            # ADD THIS VALIDATION:
+            validation_passed = self.validate_enhanced_integration()
+            if not validation_passed:
+                print("⚠️  Enhanced integration validation failed - continuing anyway")
+    
+            phase_duration = time.time() - phase_start
+            print(f"✓ Model training completed in {phase_duration:.1f} seconds")
+        
+        # Phase 4: Model Evaluation - MODIFY this section
+        if 'evaluation' in phases:
+            phase_start = time.time()
+            
+            # Check if enhanced evaluation is requested
+            if '--enhanced' in sys.argv or os.getenv('USE_ENHANCED_EVALUATION'):
+                print("🚀 Using Enhanced Trading Evaluation")
+                self.evaluate_model_enhanced()
+            else:
+                print("📊 Using Standard Evaluation")
+                self.evaluate_model()
+            
+            phase_duration = time.time() - phase_start
+            print(f"✓ Model evaluation completed in {phase_duration:.1f} seconds")
     
     def generate_comprehensive_report(self):
         """
@@ -398,6 +744,14 @@ class ComprehensiveAnalyzer:
         print("=" * 70)
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # NEW: Add this section for standardized naming  DELETE IF IT FAILS
+        # from src.utils.file_naming import create_file_paths
+        # file_paths = create_file_paths(self.config, self.experiment_name)
+    
+        # Use standardized paths (but keep legacy as backup)
+        # report_path = file_paths['comprehensive_analysis']['standard_path']
+        # results_path = file_paths['analysis_data']['standard_path']
         
         # Create comprehensive report
         report_lines = []
@@ -499,17 +853,28 @@ class ComprehensiveAnalyzer:
         report_content = "\n".join(report_lines)
         
         # Save comprehensive report
-        os.makedirs('results/reports', exist_ok=True)
-        report_path = f'results/reports/comprehensive_analysis_{self.experiment_name}_{timestamp}.txt'
+        # os.makedirs('results/reports', exist_ok=True)
+        # report_path = f'results/reports/comprehensive_analysis_{self.experiment_name}_{timestamp}.txt'
         
-        with open(report_path, 'w') as f:
-            f.write(report_content)
+        # with open(report_path, 'w') as f:
+            # f.write(report_content)
         
         # Save analysis results as JSON
-        results_path = f'results/reports/analysis_data_{self.experiment_name}_{timestamp}.json'
+        results_path = self.file_paths['analysis_json']  # Use standardized path
         with open(results_path, 'w') as f:
             # Convert numpy types for JSON serialization
             json_safe_results = self._convert_to_json_safe(self.analysis_results)
+            json.dump(json_safe_results, f, indent=2, cls=NumpyEncoder)
+            
+        # Use standardized paths instead of timestamp-based names 5 Jun Add
+        report_path = self.file_paths['analysis_report']
+        results_path = self.file_paths['analysis_json']
+    
+        # Save files to standardized locations 5 Jun Add
+        with open(report_path, 'w') as f:
+            f.write(report_content)
+    
+        with open(results_path, 'w') as f:
             json.dump(json_safe_results, f, indent=2, cls=NumpyEncoder)
         
         print(f"✓ Comprehensive report saved to: {report_path}")
@@ -911,6 +1276,9 @@ def main():
     # Output control
     parser.add_argument('--output-dir', type=str, default='results',
                       help='Directory for output files')
+    parser.add_argument('--enhanced', action='store_true',
+                      help='Use enhanced trading strategy evaluation')
+    
     
     args = parser.parse_args()
     
