@@ -55,57 +55,49 @@ class StockPredictionMetrics:
             'r2': r2
         }
     
-    def calculate_directional_accuracy(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    def calculate_directional_accuracy(self, actual_returns, predicted_returns):
         """
-        Calculate directional accuracy metrics (how well the model predicts direction).
-        
+        Calculate directional accuracy using return data.
+    
         Args:
-            y_true: Actual values
-            y_pred: Predicted values
-        
-        Returns:
-            Dictionary with directional accuracy metrics
+            actual_returns: Array of actual returns
+            predicted_returns: Array of predicted returns
         """
-        y_true_flat = y_true.flatten()
-        y_pred_flat = y_pred.flatten()
-        
-        if len(y_true_flat) < 2:
-            return {'directional_accuracy': np.nan, 'up_accuracy': np.nan, 'down_accuracy': np.nan}
-        
-        # Calculate actual and predicted directions (changes)
-        actual_directions = np.sign(np.diff(y_true_flat))
-        predicted_directions = np.sign(np.diff(y_pred_flat))
-        
-        # Remove zeros (no change) for cleaner analysis
-        non_zero_mask = actual_directions != 0
-        if np.sum(non_zero_mask) == 0:
-            return {'directional_accuracy': np.nan, 'up_accuracy': np.nan, 'down_accuracy': np.nan}
-        
-        actual_dir_clean = actual_directions[non_zero_mask]
-        predicted_dir_clean = predicted_directions[non_zero_mask]
-        
-        # Overall directional accuracy
-        correct_directions = np.sum(actual_dir_clean == predicted_dir_clean)
-        directional_accuracy = correct_directions / len(actual_dir_clean)
-        
-        # Up movement accuracy
-        up_mask = actual_dir_clean > 0
-        if np.sum(up_mask) > 0:
-            up_accuracy = np.sum(predicted_dir_clean[up_mask] > 0) / np.sum(up_mask)
-        else:
-            up_accuracy = np.nan
-        
-        # Down movement accuracy  
-        down_mask = actual_dir_clean < 0
-        if np.sum(down_mask) > 0:
-            down_accuracy = np.sum(predicted_dir_clean[down_mask] < 0) / np.sum(down_mask)
-        else:
-            down_accuracy = np.nan
-        
+        # Remove any NaN or infinite values
+        mask = np.isfinite(actual_returns) & np.isfinite(predicted_returns)
+        actual_clean = actual_returns[mask]
+        predicted_clean = predicted_returns[mask]
+    
+        if len(actual_clean) == 0:
+            return {'directional_accuracy': 0.0, 'error': 'No valid data for directional accuracy'}
+    
+        # Calculate direction (up/down)
+        actual_direction = np.sign(actual_clean)
+        predicted_direction = np.sign(predicted_clean)
+    
+        # Calculate accuracy
+        directional_accuracy = np.mean(actual_direction == predicted_direction)
+    
+        # Additional directional metrics
+        up_predictions = np.sum(predicted_direction > 0)
+        down_predictions = np.sum(predicted_direction < 0)
+        neutral_predictions = np.sum(predicted_direction == 0)
+    
+        # Precision and recall for up movements
+        actual_up = actual_direction > 0
+        predicted_up = predicted_direction > 0
+    
+        up_precision = np.sum(actual_up & predicted_up) / np.sum(predicted_up) if np.sum(predicted_up) > 0 else 0
+        up_recall = np.sum(actual_up & predicted_up) / np.sum(actual_up) if np.sum(actual_up) > 0 else 0
+    
         return {
             'directional_accuracy': directional_accuracy,
-            'up_accuracy': up_accuracy,
-            'down_accuracy': down_accuracy
+            'up_predictions': up_predictions,
+            'down_predictions': down_predictions,
+            'neutral_predictions': neutral_predictions,
+            'up_precision': up_precision,
+            'up_recall': up_recall,
+            'total_predictions': len(actual_clean)
         }
     
     def calculate_trading_metrics(self, y_true: np.ndarray, y_pred: np.ndarray, 
@@ -286,6 +278,49 @@ class StockPredictionMetrics:
             'residual_kurt': residual_kurt,
             'residual_autocorr': residual_autocorr
         }
+        
+    def calculate_risk_metrics(self, y_true, y_pred):
+        """
+        Calculate risk-related metrics for the predictions.
+        
+        Args:
+            y_true: Actual values
+            y_pred: Predicted values
+            
+        Returns:
+            dict: Risk metrics
+        """
+        # Convert to numpy arrays
+        y_true = np.array(y_true).flatten()
+        y_pred = np.array(y_pred).flatten()
+        
+        # Remove any NaN or infinite values
+        mask = np.isfinite(y_true) & np.isfinite(y_pred)
+        y_true_clean = y_true[mask]
+        y_pred_clean = y_pred[mask]
+        
+        if len(y_true_clean) == 0:
+            return {'error': 'No valid data for risk metrics'}
+        
+        # Calculate prediction errors
+        errors = y_pred_clean - y_true_clean
+        
+        # Risk metrics using your existing helper methods
+        risk_metrics = {
+            'prediction_volatility': np.std(errors),
+            'prediction_skewness': self._calculate_skewness(errors),
+            'prediction_kurtosis': self._calculate_kurtosis(errors),
+            'error_percentiles': {
+                '5th': np.percentile(errors, 5),
+                '25th': np.percentile(errors, 25),
+                '75th': np.percentile(errors, 75),
+                '95th': np.percentile(errors, 95)
+            },
+            'maximum_error': np.max(np.abs(errors)),
+            'error_range': np.max(errors) - np.min(errors)
+        }
+        
+        return risk_metrics
     
     def _calculate_skewness(self, data: np.ndarray) -> float:
         """Calculate skewness of data."""
@@ -305,39 +340,43 @@ class StockPredictionMetrics:
         kurt = np.mean(((data - mean_val) / std_val) ** 4) - 3  # Excess kurtosis
         return kurt
     
-    def comprehensive_evaluation(self, y_true: np.ndarray, y_pred: np.ndarray,
-                               dates: Optional[pd.DatetimeIndex] = None,
-                               initial_capital: float = 10000) -> Dict[str, any]:
+    def comprehensive_evaluation(self, y_true, y_pred, dates=None, return_predictions=None, actual_returns=None):
         """
-        Perform comprehensive model evaluation.
-        
-        Args:
-            y_true: Actual values
-            y_pred: Predicted values
-            dates: DateTime index (optional)
-            initial_capital: Starting capital for trading simulation
-        
-        Returns:
-            Dictionary with all evaluation metrics
-        """
-        print("Calculating comprehensive evaluation metrics...")
-        
-        results = {
-            'basic_metrics': self.calculate_basic_metrics(y_true, y_pred),
-            'directional_metrics': self.calculate_directional_accuracy(y_true, y_pred),
-            'trading_metrics': self.calculate_trading_metrics(y_true, y_pred, initial_capital),
-            'residual_analysis': self.calculate_residual_analysis(y_true, y_pred),
-            'time_based_metrics': self.calculate_time_based_metrics(y_true, y_pred, dates)
-        }
-        
-        # Store in history
-        self.metric_history.append({
-            'timestamp': pd.Timestamp.now(),
-            'metrics': results
-        })
-        
-        return results
+        Comprehensive evaluation supporting both price and return metrics.
     
+        Args:
+            y_true: True values (can be prices or returns)
+            y_pred: Predicted values (can be prices or returns)
+            dates: Date index for the data
+            return_predictions: Predicted returns (optional, for directional accuracy)
+            actual_returns: Actual returns (optional, for directional accuracy)
+        """
+        results = {}
+    
+        # Basic regression metrics (on whatever data is provided)
+        results['basic_metrics'] = self.calculate_basic_metrics(y_true, y_pred)
+    
+        # Directional accuracy (use returns if provided, otherwise use differences)
+        if return_predictions is not None and actual_returns is not None:
+            # Use the provided return data for directional accuracy
+            results['directional_metrics'] = self.calculate_directional_accuracy(
+                actual_returns, return_predictions
+            )
+        else:
+            # Fall back to using differences of the main data
+            actual_direction = np.sign(np.diff(y_true))
+            pred_direction = np.sign(np.diff(y_pred))
+            directional_accuracy = np.mean(actual_direction == pred_direction)
+            results['directional_metrics'] = {'directional_accuracy': directional_accuracy}
+    
+        # Trading metrics (use main data, whether prices or returns)
+        results['trading_metrics'] = self.calculate_trading_metrics(y_true, y_pred, dates)
+    
+        # Risk metrics
+        results['risk_metrics'] = self.calculate_risk_metrics(y_true, y_pred)
+    
+        return results
+        
     def compare_models(self, results_dict: Dict[str, Dict]) -> pd.DataFrame:
         """
         Compare multiple model results.
