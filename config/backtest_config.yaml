@@ -1,0 +1,64 @@
+# Walk-Forward Backtesting Configuration
+# Save as: config/backtest_config.yaml
+
+# Time periods for testing (your specifications)
+time_periods:
+  control:
+    start: '2018-01-01'
+    end: '2019-12-31'
+    name: 'Control Period (Pre-COVID)'
+  
+  covid_crash:
+    start: '2020-01-01'
+    end: '2021-12-31'
+    name: 'COVID Crash/Recovery'
+  
+  inflation_bear:
+    start: '2022-01-01'
+    end: '2022-12-31'
+    name: 'Inflation/Bear Market'
+  
+  recovery:
+    start: '2023-01-01'
+    end: '2024-12-31'
+    name: 'Recovery Period'
+
+# Walk-forward analysis parameters
+walk_forward:
+  training_months: 12     # 12 months of training data
+  test_months: 3          # 3 months of testing
+  step_months: 1          # Roll forward by 1 month
+
+# Performance thresholds for model qualification
+performance_thresholds:
+  min_sharpe: 1.0                    # Minimum Sharpe ratio
+  max_drawdown: -20.0                # Maximum drawdown (%)
+  min_directional_accuracy: 0.52     # Minimum directional accuracy
+  min_excess_return: 0.02            # Minimum excess return (2%)
+  min_win_rate: 0.5                  # Minimum win rate
+
+# Transaction costs (realistic brokerage costs)
+transaction_costs:
+  commission_per_trade: 0.50         # $0.50 per trade (modern brokers)
+  bid_ask_spread_pct: 0.02           # 0.02% bid-ask spread
+  slippage_pct: 0.05                 # 0.05% market impact/slippage
+
+# Option analysis parameters
+option_analysis:
+  forecast_periods: ['2w', '4w', '6m']   # 2 weeks, 4 weeks, 6 months
+  confidence_threshold: 0.7              # Minimum confidence for recommendations
+  iv_threshold: 0.1                      # Implied volatility difference threshold
+
+# Model ranking weights
+ranking_weights:
+  sharpe_ratio: 0.4          # 40% weight on Sharpe ratio
+  excess_return: 0.3         # 30% weight on excess return
+  win_rate: 0.2              # 20% weight on consistency
+  drawdown_control: 0.1      # 10% weight on risk control
+
+# Output settings
+output:
+  save_detailed_results: true
+  save_predictions: true
+  save_confidence_bounds: true
+  generate_plots: true
